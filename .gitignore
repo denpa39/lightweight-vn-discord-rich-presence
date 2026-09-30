@@ -1,0 +1,13 @@
+bin/
+obj/
+dist/
+.venv/
+.dotnet-local/
+self-test-results.txt
+ui-preview.png
+ui-preview-*.png
+release/
+settings.json
+settings.json.tmp
+status.json
+app.log
