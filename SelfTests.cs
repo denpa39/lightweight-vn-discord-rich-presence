@@ -16,6 +16,9 @@ internal static class SelfTests
             Check(WindowsStartup.Command(@"C:\Apps with spaces\VN Presence.exe") == "\"C:\\Apps with spaces\\VN Presence.exe\" --background",
                 "Windows startup quotes the executable path and launches into the tray");
             Check(new Settings().ProfileUrl == null && new Settings().Games.Count == 0, "Fresh installs contain no profile or saved game data");
+            Check(!new Settings().GuideDismissed &&
+                JsonSerializer.Deserialize<Settings>(JsonSerializer.Serialize(new Settings { GuideDismissed = true }))?.GuideDismissed == true,
+                "Guide appears on first launch and its dismissal survives saving");
             Check(VnImage.ValidCustomUrl("https://example.com/cover.png") && VnImage.ValidCustomUrl("http://example.com/cover.jpg") &&
                 !VnImage.ValidCustomUrl("file:///C:/cover.png") && !VnImage.ValidCustomUrl("javascript:alert(1)") &&
                 !VnImage.ValidCustomUrl("https://user:pass@example.com/cover.png") &&
@@ -72,6 +75,14 @@ internal static class SelfTests
                 JsonSerializer.Deserialize<GameLink>(JsonSerializer.Serialize(alternatePrefix))?.WindowTitlePrefix == "サクラノ詩",
                 "Window title prefix overrides VNDB matching, respects boundaries, and persists");
             var adjusted = automatic with { RemoveProgressText = "Ver2.0.2" };
+            var multipleRemovals = automatic with { RemoveProgressText = " Ver1.0.0 ; R18 ;; " };
+            Check(multipleRemovals.Progress("Kanon wordVer1.0.0wordR18end") == "word word end" &&
+                multipleRemovals.Progress("Kanon word  Ver1.0.0   word") == "word word",
+                "Removing phrases keeps surrounding words separated without duplicate spaces");
+            Check(multipleRemovals.Progress("Kanon Ver1.0.0 - Chapter 2 - R18") == "Chapter 2" &&
+                multipleRemovals.Progress("Kanon ver1.0.0 - Chapter 3 - r18") == "Chapter 3" &&
+                (automatic with { RemoveProgressText = "foo, bar" }).Progress("Kanon foo, bar - Chapter 1") == "Chapter 1",
+                "Semicolon-separated removal handles multiple phrases and keeps commas literal");
             Check(adjusted.Progress("Kanon - Ver2.0.2, January 7th") == "January 7th" &&
                 adjusted.Progress("Kanon - ver2.0.2, January 8th") == "January 8th" &&
                 adjusted.Progress("Kanon - Ver2.0.2") == null &&

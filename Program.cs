@@ -35,6 +35,16 @@ internal static class Program
                 form.DrawToBitmap(bitmap, new Rectangle(Point.Empty, bitmap.Size));
                 bitmap.Save($"ui-preview-{i}.png");
             }
+            using var guide = new GuideForm();
+            guide.ShowInTaskbar = false; guide.Opacity = 0; guide.Show();
+            var guideSections = guide.Controls.OfType<TableLayoutPanel>().Single().Controls.OfType<ListBox>().Single();
+            using var guideBitmap = new Bitmap(guide.Width, guide.Height);
+            for (var i = 0; i < guideSections.Items.Count; i++)
+            {
+                guideSections.SelectedIndex = i; Application.DoEvents();
+                guide.DrawToBitmap(guideBitmap, new Rectangle(Point.Empty, guideBitmap.Size));
+                guideBitmap.Save($"ui-preview-guide-{i}.png");
+            }
             return;
         }
         try { Application.Run(new MainForm(startInTray: args.Contains("--background"))); Log("Closed normally"); }
@@ -118,7 +128,7 @@ public sealed class MainForm : Form
         gamesPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         gamesPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         gamesPanel.Controls.Add(library);
-        gamesPanel.Controls.Add(Row(Button("Add...", () => { RefreshRunning(); tabs.SelectedTab = addTab; }), Button("Details...", EditProgress), Button("Cover...", EditCover), Button("Remove", Remove), Button("Profile...", EditProfile)));
+        gamesPanel.Controls.Add(Row(Button("Add...", () => { RefreshRunning(); tabs.SelectedTab = addTab; }), Button("Details...", EditProgress), Button("Cover...", EditCover), Button("Remove", Remove), Button("Profile...", EditProfile), Button("Guide", ShowGuide)));
         gamesTab.Controls.Add(gamesPanel);
         library.FormattingEnabled = true;
         library.Format += (_, e) => { if (e.ListItem is GameLink link) e.Value = link.Novel.NativeTitle; };
@@ -184,7 +194,13 @@ public sealed class MainForm : Form
         FormClosing += (_, _) => { closing = true; timer.Stop(); shutdown.Cancel(); discord.Dispose(); tray.Dispose(); cover.Image?.Dispose(); };
         timer.Tick += async (_, _) => await Tick();
         RefreshLibrary(); RefreshRunning();
-        if (!previewOnly) Shown += async (_, _) => { if (startInTray) Hide(); timer.Start(); await Tick(); };
+        if (!previewOnly) Shown += async (_, _) =>
+        {
+            if (startInTray) Hide();
+            timer.Start();
+            if (!startInTray && !settings.GuideDismissed) ShowGuide();
+            await Tick();
+        };
     }
     private static FlowLayoutPanel Row(params Control[] controls)
     {
@@ -197,7 +213,14 @@ public sealed class MainForm : Form
         button.Click += (_, _) => { try { action(); } catch (Exception e) { Error(e.Message); } }; return button;
     }
     private void Error(string message) { if (!closing) MessageBox.Show(this, message, "VN Presence", MessageBoxButtons.OK, MessageBoxIcon.Information); }
-    private void Restore() { Show(); WindowState = FormWindowState.Normal; Activate(); }
+    private void Restore() { Show(); WindowState = FormWindowState.Normal; Activate(); if (!settings.GuideDismissed) ShowGuide(); }
+    private void ShowGuide()
+    {
+        using var guide = new GuideForm();
+        guide.ShowDialog(this);
+        try { settings.GuideDismissed = true; settings.Save(); }
+        catch (Exception e) { Error(e.Message); }
+    }
     private void RefreshRunning()
     {
         var selected = (running.SelectedItem as RunningGame)?.Pid;
@@ -276,7 +299,7 @@ public sealed class MainForm : Form
         var mode = new ComboBox { Left = 10, Top = 10, Width = 340, DropDownStyle = ComboBoxStyle.DropDownList };
         mode.Items.AddRange(["Automatic", "Custom", "Hidden"]);
         var text = new TextBox { Left = 10, Top = 40, Width = 340, MaxLength = 120, Text = link.CustomProgress ?? "" };
-        var removeLabel = new Label { Left = 10, Top = 70, Width = 340, Text = "Remove text from automatic details (optional)" };
+        var removeLabel = new Label { Left = 10, Top = 70, Width = 340, Text = "Remove text (separate phrases with ;)" };
         var remove = new TextBox { Left = 10, Top = 94, Width = 340, Text = link.RemoveProgressText ?? "" };
         var prefixLabel = new Label { Left = 10, Top = 125, Width = 340, Text = "Window title prefix (blank = VNDB titles)" };
         var prefix = new TextBox { Left = 10, Top = 149, Width = 340, Text = link.WindowTitlePrefix ?? "" };

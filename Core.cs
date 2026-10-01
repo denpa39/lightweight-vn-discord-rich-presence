@@ -38,7 +38,12 @@ public record GameLink(string Exe, Novel Novel, string? CustomProgress = null, s
         if (CustomProgress != null) return string.IsNullOrWhiteSpace(CustomProgress) ? null : CustomProgress.Trim();
         var progress = Detection.Progress(caption, Novel, WindowTitlePrefix);
         if (progress != null && !string.IsNullOrWhiteSpace(RemoveProgressText))
-            progress = progress.Replace(RemoveProgressText.Trim(), "", StringComparison.OrdinalIgnoreCase).Trim(' ', '-', '–', '—', ':', ',');
+        {
+            foreach (var phrase in RemoveProgressText.Split(';', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+                progress = progress.Replace(phrase, " ", StringComparison.OrdinalIgnoreCase);
+            progress = System.Text.RegularExpressions.Regex.Replace(progress, @"\s+", " ");
+            progress = progress.Trim(' ', '-', '–', '—', ':', ',');
+        }
         return string.IsNullOrWhiteSpace(progress) ? null : progress;
     }
     public override string ToString() => $"{Novel.NativeTitle}  —  {Exe}";
@@ -69,6 +74,7 @@ public class Settings
     public const string DefaultClientId = "1554580268285698068";
     public string ClientId { get; set; } = DefaultClientId;
     public string? ProfileUrl { get; set; }
+    public bool GuideDismissed { get; set; }
     public static string? NormalizeProfileUrl(string? value)
     {
         var match = System.Text.RegularExpressions.Regex.Match(value?.Trim() ?? "", @"^(?:https://vndb\.org/)?(u[1-9][0-9]*)/?$",

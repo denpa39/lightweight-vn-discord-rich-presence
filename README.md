@@ -4,18 +4,20 @@ Shows your VN's native title, brand, and cover on Discord. Cover and brand link 
 
 ## Install
 
-Download **VN-Presence-win-x64.zip** from [Releases](https://github.com/denpa39/vndb-discord-rich-precense/releases/latest), extract it, and run **VN Presence.exe**.
+Download the **VN-Presence-win-x64** ZIP from [Releases](https://github.com/denpa39/vndb-discord-rich-precense/releases/latest), extract it, and run **VN Presence.exe**.
 
 Windows x64. No installer, .NET download, token, or Developer Portal setup needed.
 
 ## Setup
+
+A skippable guide opens on first launch. **Guide** reopens it anytime.
 
 1. Open Discord desktop and enable **Activity Privacy → Share your detected activities**.
 2. Start your VN. In **Add game**, click its window, or **Browse...** to its executable.
 3. Search its title or paste its VNDB URL. Select the result and click **Link**.
 
 Select a saved game → **Details...** to use automatic window text, custom text, or hide it.
-Automatic details can remove a fixed phrase using **Remove text**.
+Automatic details can remove phrases using **Remove text**, separated by `;` (for example, `Ver1.0.0; R18`).
 If the window name differs from VNDB, set **Window title prefix** to the game's name as shown in its title bar.
 **Cover...** selects a VNDB release cover or **Custom image...** edits your own direct public image link. One custom image is saved per game; **Default** restores the main cover. Discord controls the square crop.
 
