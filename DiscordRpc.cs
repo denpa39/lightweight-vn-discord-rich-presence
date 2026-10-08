@@ -35,7 +35,21 @@ public sealed class DiscordRpc : IDisposable
         catch { Dispose(); throw; }
     }
     public static string Short(string text) => string.Concat(text.EnumerateRunes().Take(120));
-    public static object Activity(GameLink link, long start, string? progress = null, string? profileUrl = null)
+    internal static string ProfileLabel(string? username)
+    {
+        var name = username?.Trim();
+        if (string.IsNullOrEmpty(name)) return "VNDB profile";
+        const string prefix = "Visit ", suffix = "’s VNDB profile";
+        var limit = 32 - prefix.Length - suffix.Length;
+        if (name.Length > limit)
+        {
+            var length = limit - 1;
+            if (char.IsHighSurrogate(name[length - 1])) length--;
+            name = name[..length] + "…";
+        }
+        return prefix + name + suffix;
+    }
+    public static object Activity(GameLink link, long start, string? progress = null, string? profileUrl = null, string? username = null)
     {
         var activity = new Dictionary<string, object>
         {
@@ -44,9 +58,11 @@ public sealed class DiscordRpc : IDisposable
         };
         if (link.Novel.Brand != null) activity["details"] = Short(link.Novel.Brand);
         if (link.Novel.BrandUrl != null) activity["details_url"] = link.Novel.BrandUrl;
-        if (!string.IsNullOrWhiteSpace(progress)) activity["state"] = Short(progress);
+        if (!string.IsNullOrWhiteSpace(progress)) activity["state"] = Short(progress!);
+        var buttons = new[] { new { label = "View on VNDB", url = link.Novel.GameUrl } }.ToList();
         if (Settings.NormalizeProfileUrl(profileUrl) is string url)
-            activity["buttons"] = new[] { new { label = "VNDB profile", url } };
+            buttons.Add(new { label = ProfileLabel(username), url });
+        activity["buttons"] = buttons;
         if ((link.Cover ?? link.Novel.Image) is VnImage image)
             activity["assets"] = new { large_image = image.Url, large_text = Short(link.Novel.NativeTitle), large_url = link.Novel.GameUrl };
         return activity;
@@ -54,7 +70,7 @@ public sealed class DiscordRpc : IDisposable
     public async Task Update(object? activity, CancellationToken token)
     {
         var nonce = Guid.NewGuid().ToString();
-        await Write(1, JsonSerializer.SerializeToUtf8Bytes(new { cmd = "SET_ACTIVITY", args = new { pid = Environment.ProcessId, activity }, nonce }), token);
+        await Write(1, JsonSerializer.SerializeToUtf8Bytes(new { cmd = "SET_ACTIVITY", args = new { pid = Program.ProcessId, activity }, nonce }), token);
         while (true)
         {
             using var reply = await Read(token);
@@ -71,8 +87,8 @@ public sealed class DiscordRpc : IDisposable
         BinaryPrimitives.WriteInt32LittleEndian(header, opcode);
         BinaryPrimitives.WriteInt32LittleEndian(header.AsSpan(4), body.Length);
         await pipe!.WriteAsync(header, token);
-        await pipe.WriteAsync(body, token);
-        await pipe.FlushAsync(token);
+        await pipe!.WriteAsync(body, token);
+        await pipe!.FlushAsync(token);
     }
     private async Task<JsonDocument> Read(CancellationToken token)
     {
@@ -84,7 +100,7 @@ public sealed class DiscordRpc : IDisposable
             var length = BinaryPrimitives.ReadInt32LittleEndian(header.AsSpan(4));
             if (length < 0 || length > 1024 * 1024) throw new IOException("Invalid Discord frame.");
             var data = new byte[length];
-            await pipe.ReadExactlyAsync(data, token);
+            await pipe!.ReadExactlyAsync(data, token);
             if (opcode == 3) { await Write(4, data, token); continue; }
             if (opcode == 2) throw new IOException("Discord closed the connection. Check the Application ID.");
             if (opcode != 1) continue;

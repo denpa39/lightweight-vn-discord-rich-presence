@@ -2,11 +2,22 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <UseAppHost>true</UseAppHost>
+    <!-- Desktop Runtime also supplies .NET; request it directly in the install prompt. -->
+    <AlwaysIncludeCoreFrameworkInRuntimeConfig>false</AlwaysIncludeCoreFrameworkInRuntimeConfig>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AssemblyName>VN Presence</AssemblyName>
-    <Version>1.0.1</Version>
+    <Version>1.1.0</Version>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <DefaultItemExcludes>$(DefaultItemExcludes);release/**;dist/**</DefaultItemExcludes>
+    <DebugType>none</DebugType>
   </PropertyGroup>
+  <ItemGroup>
+    <AssemblyMetadata Include="CoverUploadEndpoint" Value="$(CoverUploadEndpoint)" />
+  </ItemGroup>
 </Project>

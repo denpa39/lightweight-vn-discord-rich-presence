@@ -11,3 +11,7 @@ settings.json
 settings.json.tmp
 status.json
 app.log
+node_modules/
+.wrangler/
+.dev.vars
+.env
