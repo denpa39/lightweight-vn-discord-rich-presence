@@ -10,7 +10,7 @@ The small download comes from using the shared **.NET 8 Desktop Runtime**, which
 
 ## Install
 
-Download **VN-Presence-win-x64.zip** from [Releases](https://github.com/denpa39/vndb-discord-rich-precense/releases/latest), extract it, and open **VN Presence.exe**.
+Download **VN Presence.exe** from [Releases](https://github.com/denpa39/vndb-discord-rich-precense/releases/latest) and open it. No installer or extraction needed.
 
 - Windows 10 or 11, 64-bit.
 - [.NET 8 Desktop Runtime for Windows x64](https://dotnet.microsoft.com/en-us/download/dotnet/8.0). Older .NET Framework 4.x does not replace it. If the runtime is missing, Windows prompts you to download it; install it and reopen the app.
