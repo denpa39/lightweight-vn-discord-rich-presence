@@ -6,7 +6,12 @@ internal static class Program
 {
     internal static readonly int ProcessId = Environment.ProcessId;
     internal static readonly Icon AppIcon = Icon.ExtractAssociatedIcon(Environment.ProcessPath!) ?? SystemIcons.Application;
-    internal static readonly string UiFontName = FontFamily.Families.Any(f => f.Name == "Meiryo UI") ? "Meiryo UI" : "Yu Gothic UI";
+    internal static readonly string UiFontName = ChooseFont();
+    private static string ChooseFont()
+    {
+        using var font = new Font("Meiryo UI", 9);
+        return font.Name == "Meiryo UI" ? "Meiryo UI" : "Yu Gothic UI";
+    }
     [STAThread]
     private static void Main(string[] args)
     {
@@ -660,7 +665,8 @@ public sealed class MainForm : Form
         var process = link == null ? null : previewProcesses.FirstOrDefault(p => string.Equals(p.Exe, link.Exe, StringComparison.OrdinalIgnoreCase));
         activityPreview.ShowActivity(link, process?.Started ?? 0, link?.Progress(process?.Caption ?? ""), settings.ActivityProfileUrl, accountPanel.ProfileUsername);
         previewStatus.Text = "Discord preview" + (link == null ? "" : paused ? " · Paused" : process == null ? " · Game not running" : process.Pid == currentPid ? " · Live" : " · Not shared");
-        var url = (link?.Cover ?? link?.Novel.Image)?.Url;
+        var image = link?.Cover ?? link?.Novel.Image;
+        var url = image?.Thumbnail ?? image?.Url;
         if (url == activityImageUrl) return;
         activityImageUrl = url;
         var version = ++activityImageVersion;
