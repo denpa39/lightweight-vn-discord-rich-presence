@@ -2,12 +2,6 @@
 
 A small Windows app that shares your visual novel on Discord, with its native title, brand, cover, and game details from the window title.
 
-## Small download, native UI
-
-The executable is **about 380 KiB**. VN Presence uses native Windows controls, with **no Electron, embedded browser, or bundled .NET runtime**. It runs in the tray and checks for games every five seconds.
-
-The small download comes from using the shared **.NET 8 Desktop Runtime**, which you install separately once and can share with other .NET apps.
-
 ## Install
 
 Download **VN.Presence.exe** from [Releases](https://github.com/denpa39/vndb-discord-rich-precense/releases/latest) and open it. No installer or extraction needed.
