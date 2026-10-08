@@ -23,7 +23,7 @@ public sealed class DiscordRpc : IDisposable
             catch (TimeoutException) { candidate.Dispose(); }
             catch { candidate.Dispose(); throw; }
         }
-        if (pipe == null) throw new IOException("Open the Discord desktop app. Retrying automatically…");
+        if (pipe == null) throw new IOException("Discord is not running.");
         try
         {
             await Write(0, JsonSerializer.SerializeToUtf8Bytes(new { v = 1, client_id = id }), token);
@@ -34,6 +34,12 @@ public sealed class DiscordRpc : IDisposable
         }
         catch { Dispose(); throw; }
     }
+    internal static string StatusMessage(Exception error) => error switch
+    {
+        IOException io when io is EndOfStreamException || (io.HResult & 0xFFFF) is 109 or 232 or 233 => "Discord is not running.",
+        OperationCanceledException => "Discord timed out. Retrying…",
+        _ => error.Message
+    };
     public static string Short(string text) => string.Concat(text.EnumerateRunes().Take(120));
     internal static string ProfileLabel(string? username)
     {

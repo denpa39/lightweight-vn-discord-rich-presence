@@ -68,7 +68,7 @@ test('upload, duplicate reuse, public GET/HEAD and method restriction', async ()
     const head = await handle(new Request(url, { method: 'HEAD' }), s.env); assert.equal(await head.text(), '');
     assert.equal(head.headers.get('Content-Length'), String(image.length));
     assert.equal((await handle(new Request('https://covers.example/upload'), s.env)).status, 404);
-    assert.equal((await handle(new Request(url, { method: 'DELETE' }), s.env)).status, 404);
+    assert.equal((await handle(new Request(url, { method: 'DELETE' }), s.env)).status, 403);
   } finally { s.close(); }
 });
 
@@ -254,4 +254,54 @@ test('unused covers remain indefinitely when storage has space', () => {
     assert.equal(worker.scheduled,undefined);
     assert.deepEqual(JSON.parse(readFileSync(new URL('wrangler.jsonc',import.meta.url),'utf8')).triggers.crons,[]);
   } finally {s.close();}
+});
+
+test('only the original upload owner can delete; duplicate uploads cannot claim it', async () => {
+  const s=setup(); const owner='a'.repeat(64), stranger='b'.repeat(64);
+  const upload = key => {const request=post(png,'image/png');request.headers.set('X-VNDB-ID','v17');request.headers.set('X-Cover-Owner',key);return request;};
+  const remove = (url,key) => handle(new Request(url,{method:'DELETE',headers:{'X-Cover-Owner':key}}),s.env);
+  const gallery = key => handle(new Request('https://covers.example/gallery/v17',{headers:{'X-Cover-Owner':key}}),s.env);
+  try {
+    const {url}=await (await handle(upload(owner),s.env)).json();
+    assert.deepEqual(await (await gallery(owner)).json(),[{url,canRemove:true}]);
+    assert.equal((await gallery(owner)).headers.get('cache-control'),'no-store');
+    await handle(upload(stranger),s.env);
+    assert.deepEqual(await (await gallery(stranger)).json(),[{url,canRemove:false}]);
+    assert.equal((await remove(url,stranger)).status,403);
+    const hash=url.split('/').at(-1).split('.')[0];const db=s.images[parseInt(hash.slice(0,8),16)%SHARDS];
+    const stored=db.prepare('SELECT owner FROM covers WHERE hash=?').get(hash).owner;
+    assert.notEqual(stored,owner);assert.equal(stored.length,64);
+    const otherGame=new Request(url,{method:'POST',headers:{'X-VNDB-ID':'v18'}});await handle(otherGame,s.env);
+    assert.equal(db.prepare('SELECT bytes FROM storage').get().bytes,png.length);
+    assert.equal((await remove(url,owner)).status,204);
+    assert.equal(db.prepare('SELECT bytes FROM storage').get().bytes,0);
+    assert.equal(db.prepare('SELECT count(*) AS n FROM game_covers').get().n,0);
+    assert.deepEqual(await (await gallery(owner)).json(),[]);
+    assert.equal((await handle(new Request(url),s.env)).status,404);
+    assert.equal((await remove(url,owner)).status,404);
+    assert.equal(s.db.prepare('SELECT uploads FROM budget WHERE id=1').get().uploads,1);
+  } finally{s.close();}
+});
+
+test('legacy anonymous uploads cannot be claimed; malformed and rate-limited deletion fail safely', async () => {
+  const s=setup();const key='c'.repeat(64);
+  try {
+    const {url}=await (await handle(post(png,'image/png'),s.env)).json();
+    const claim=post(png,'image/png');claim.headers.set('X-Cover-Owner',key);await handle(claim,s.env);
+    assert.equal((await handle(new Request(url,{method:'DELETE',headers:{'X-Cover-Owner':key}}),s.env)).status,403);
+    assert.equal((await handle(new Request(url,{method:'DELETE',headers:{'X-Cover-Owner':'bad'}}),s.env)).status,400);
+    const invalid=post(png,'image/png');invalid.headers.set('X-Cover-Owner','bad');assert.equal((await handle(invalid,s.env)).status,400);
+    s.env.USE_LIMIT.limit=async()=>({success:false});
+    assert.equal((await handle(new Request(url,{method:'DELETE',headers:{'X-Cover-Owner':key}}),s.env)).status,429);
+  }finally{s.close();}
+});
+
+test('ownership migration keeps old cover data and leaves legacy ownership unset', () => {
+  const db=new DatabaseSync(':memory:');
+  try {
+    db.exec("CREATE TABLE covers(hash TEXT PRIMARY KEY,size INTEGER,data TEXT,format TEXT,last_used INTEGER,use_days INTEGER); INSERT INTO covers VALUES('old',5,'pixels','png',123,7)");
+    db.exec(readFileSync(new URL('migrate-owner.sql',import.meta.url),'utf8'));
+    const row=db.prepare('SELECT * FROM covers').get();
+    assert.equal(row.owner,null);assert.equal(row.data,'pixels');assert.equal(row.last_used,123);assert.equal(row.use_days,7);
+  }finally{db.close();}
 });

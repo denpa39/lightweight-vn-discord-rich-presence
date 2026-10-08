@@ -84,6 +84,21 @@ public class Settings
     [JsonIgnore] public string? ActivityProfileUrl => ShowProfileButton ? NormalizeProfileUrl(ProfileUrl) : null;
     public bool GuideDismissed { get; set; }
     public string? VndbTokenProtected { get; set; }
+    public string? CoverOwnerProtected { get; set; }
+    internal string? CoverOwnerKey(bool create = false)
+    {
+        if (CoverOwnerProtected != null)
+        {
+            var key = AccountToken.Unprotect(CoverOwnerProtected);
+            if (!System.Text.RegularExpressions.Regex.IsMatch(key, "^[a-f0-9]{64}$")) throw new InvalidDataException("Invalid cover ownership key.");
+            return key;
+        }
+        if (!create) return null;
+        var generated = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
+        CoverOwnerProtected = AccountToken.Protect(generated);
+        try { Save(); } catch { CoverOwnerProtected = null; throw; }
+        return generated;
+    }
     public static string? NormalizeProfileUrl(string? value)
     {
         var match = System.Text.RegularExpressions.Regex.Match(value?.Trim() ?? "", @"^(?:https://vndb\.org/)?(u[1-9][0-9]*)/?$",

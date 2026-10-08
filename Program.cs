@@ -22,8 +22,8 @@ internal static class Program
         {
             Log("Started");
             AppDomain.CurrentDomain.UnhandledException += (_, e) => Log("Unhandled: " + e.ExceptionObject);
-            Application.SetUnhandledExceptionMode(UnhandledExceptionMode.ThrowException);
         }
+        Application.SetUnhandledExceptionMode(UnhandledExceptionMode.ThrowException);
         ApplicationConfiguration.Initialize();
         Application.SetDefaultFont(new Font(UiFontName, 9));
         if (args.Contains("--ui-test"))
@@ -80,6 +80,64 @@ internal static class Program
                 addButton.PerformClick();
                 if (!form.Visible || form.IsDisposed) throw new InvalidOperationException("Closing Add game must keep the main window open.");
             }
+            var savedGames = content.Controls.OfType<TableLayoutPanel>().Single(p => p.Controls.OfType<ListBox>().Any()).Controls.OfType<ListBox>().Single();
+            savedGames.Items.Add(new GameLink("test-cover.exe", new Novel("v1", "向日葵の教会と長い夏休み", null, "ja", [], null, [])));
+            savedGames.SelectedIndex = savedGames.Items.Count - 1;
+            form.BeginInvoke(new Action(() =>
+            {
+                var dialog = form.OwnedForms.Single(f => f.Text == "Details");
+                var layout = dialog.Controls.OfType<TableLayoutPanel>().Single();
+                var custom = layout.Controls.OfType<TextBox>().Single();
+                var result = layout.Controls.OfType<GroupBox>().Single(g => g.Text == "Preview").Controls.OfType<TableLayoutPanel>().Single().Controls.OfType<TextBox>().Last();
+                layout.Controls.OfType<ComboBox>().Single().SelectedIndex = 1;
+                custom.Text = new string('あ', 120);
+                if (result.Text != custom.Text || !result.Multiline || custom.Width < 640)
+                    throw new InvalidOperationException("Details must preview long custom text in the wider layout.");
+                var width = custom.Width; dialog.Width += 120; dialog.PerformLayout();
+                if (custom.Width < width + 100) throw new InvalidOperationException("Details fields must grow with the window.");
+                dialog.Size = dialog.MinimumSize; dialog.PerformLayout();
+                var buttons = layout.Controls.OfType<FlowLayoutPanel>().Single();
+                if (result.Height < 25 || buttons.Bottom > dialog.ClientSize.Height - 10)
+                    throw new InvalidOperationException("Details preview and buttons must fit at the minimum size.");
+                layout.Controls.OfType<ComboBox>().Single().SelectedIndex = 0;
+                custom.Clear();
+                var cleanup = layout.Controls.OfType<GroupBox>().Single(g => g.Text == "Automatic cleanup").Controls.OfType<TableLayoutPanel>().Single();
+                cleanup.Controls.OfType<TextBox>().First().Text = "Ver1.0.0;R18";
+                result.Parent!.Controls.OfType<TextBox>().First().Text = "向日葵の教会と長い夏休み - Festival Rumors Ver1.0.0 R18";
+                cleanup.Controls.OfType<TextBox>().Last().Text = "-";
+                if (result.Text != "Festival Rumors") throw new InvalidOperationException("Reorganized Details must preserve automatic cleanup.");
+                dialog.ClientSize = new Size(680, 520); dialog.PerformLayout();
+                using var detailsBitmap = new Bitmap(dialog.Width, dialog.Height);
+                dialog.DrawToBitmap(detailsBitmap, new Rectangle(Point.Empty, detailsBitmap.Size)); detailsBitmap.Save("ui-preview-details.png");
+                dialog.Close();
+            }));
+            typeof(MainForm).GetMethod("EditProgress", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.Invoke(form, null);
+            form.BeginInvoke(new Action(() =>
+            {
+                var dialog = form.OwnedForms.Single(f => f.Text == "Cover");
+                var layout = dialog.Controls.OfType<TableLayoutPanel>().Single();
+                var top = layout.Controls.OfType<TableLayoutPanel>().Single(p => p.ColumnCount == 2);
+                var list = top.Controls.OfType<GroupBox>().Single(g => g.Text == "Covers").Controls.OfType<ListBox>().Single();
+                var group = layout.Controls.OfType<GroupBox>().Single();
+                if (group.Visible || list.Items.Cast<CoverChoice>().Any(c => c.Label.StartsWith("Community cover")))
+                    throw new InvalidOperationException("Community covers must not be mixed with release covers.");
+                if (list.Width < 580) throw new InvalidOperationException("Release names need a wider cover list.");
+                var originalWidth = list.Width; dialog.Width += 120; dialog.PerformLayout();
+                if (list.Width < originalWidth + 100) throw new InvalidOperationException("The cover list must grow when the window is widened.");
+                layout.Controls.OfType<FlowLayoutPanel>().Single().Controls.OfType<Button>().Single(b => b.Text == "Community covers").PerformClick();
+                dialog.Size = dialog.MinimumSize; dialog.PerformLayout();
+                var save = layout.Controls.OfType<TableLayoutPanel>().Single(p => p.ColumnCount == 3).Controls.OfType<Button>().Single(b => b.Text == "Save");
+                if (!group.Visible || group.PointToScreen(new Point(0, group.Height)).Y >= save.PointToScreen(Point.Empty).Y ||
+                    save.PointToScreen(new Point(0, save.Height)).Y >= dialog.PointToScreen(new Point(0, dialog.ClientSize.Height)).Y)
+                    throw new InvalidOperationException("The community list must fit above Save, including at the minimum size.");
+                if (group.Controls.OfType<TableLayoutPanel>().Single().Controls.OfType<Button>().Single().Enabled)
+                    throw new InvalidOperationException("Remove upload needs an owned selection.");
+                dialog.ClientSize = new Size(900, 615); dialog.PerformLayout();
+                using var coverBitmap = new Bitmap(dialog.Width, dialog.Height);
+                dialog.DrawToBitmap(coverBitmap, new Rectangle(Point.Empty, coverBitmap.Size)); coverBitmap.Save("ui-preview-community.png");
+                dialog.Close();
+            }));
+            typeof(MainForm).GetMethod("EditCover", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.Invoke(form, null);
             using var guide = new GuideForm();
             guide.ShowInTaskbar = false; guide.Opacity = 0; guide.Show();
             var guideSections = guide.Controls.OfType<TableLayoutPanel>().Single().Controls.OfType<ListBox>().Single();
@@ -106,7 +164,10 @@ internal static class Program
             editor.Controls.OfType<TrackBar>().Single().Value = 20; Application.DoEvents();
             SelfTests.TestCropEditor(editor, sampleCover.Size);
             editor.DrawToBitmap(editorBitmap, new Rectangle(Point.Empty, editorBitmap.Size));
-            editorBitmap.Save("ui-preview-cover-crop.png"); editor.Close();
+            editorBitmap.Save("ui-preview-cover-crop.png");
+            editor.Controls.OfType<RadioButton>().Single(r => r.Text == "Fit whole cover").Checked = true;
+            editor.Controls.OfType<CheckBox>().Single().Checked = true; Application.DoEvents();
+            editor.DrawToBitmap(editorBitmap, new Rectangle(Point.Empty, editorBitmap.Size)); editorBitmap.Save("ui-preview-cover-blur.png"); editor.Close();
             using var wideCover = new Bitmap(1200, 500);
             using var wideEditor = new CoverEditor(wideCover);
             wideEditor.ShowInTaskbar = false; wideEditor.Opacity = 0; wideEditor.Show(); Application.DoEvents();
@@ -448,24 +509,24 @@ public sealed class MainForm : Form
     private void EditProgress()
     {
         if (library.SelectedItem is not GameLink link) { Error("Select a game first."); return; }
-        using var dialog = new Form { Text = "Details", Icon = Program.AppIcon, ClientSize = new Size(360, 385), Font = Font,
-            FormBorderStyle = FormBorderStyle.FixedDialog, StartPosition = FormStartPosition.CenterParent,
+        using var dialog = new Form { Text = "Details", Icon = Program.AppIcon, ClientSize = new Size(680, 520), MinimumSize = new Size(580, 540), Font = Font,
+            FormBorderStyle = FormBorderStyle.Sizable, StartPosition = FormStartPosition.CenterParent,
             MaximizeBox = false, MinimizeBox = false };
-        var mode = new ComboBox { Left = 10, Top = 10, Width = 340, DropDownStyle = ComboBoxStyle.DropDownList };
+        var mode = new ComboBox { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
         mode.Items.AddRange(["Automatic", "Custom"]);
-        var text = new TextBox { Left = 10, Top = 40, Width = 340, MaxLength = 120, Text = link.CustomProgress ?? "" };
-        var removeLabel = new Label { Left = 10, Top = 70, Width = 340, Text = "Remove text (separate phrases with ;)" };
-        var remove = new TextBox { Left = 10, Top = 94, Width = 340, Text = link.RemoveProgressText ?? "" };
-        var prefixLabel = new Label { Left = 10, Top = 125, Width = 340, Text = "Window title prefix (blank = VNDB titles)" };
-        var prefix = new TextBox { Left = 10, Top = 149, Width = 340, Text = link.WindowTitlePrefix ?? "" };
-        var edgesLabel = new Label { Left = 10, Top = 180, Width = 340, Text = "Trim from edges (characters, e.g. - or -())" };
-        var edges = new TextBox { Left = 10, Top = 204, Width = 340, Text = link.TrimEdges ?? "" };
-        var windowLabel = new Label { Left = 10, Top = 235, Width = 340, Text = "Current window title (select text to copy)" };
+        var text = new TextBox { Dock = DockStyle.Fill, MaxLength = 120, Text = link.CustomProgress ?? "", PlaceholderText = "Custom details (leave blank to hide)" };
+        var removeLabel = new Label { Dock = DockStyle.Fill, Text = "Remove text (separate phrases with ;)" };
+        var remove = new TextBox { Dock = DockStyle.Fill, Text = link.RemoveProgressText ?? "" };
+        var prefixLabel = new Label { Dock = DockStyle.Fill, Text = "Window title prefix (blank = VNDB titles)" };
+        var prefix = new TextBox { Dock = DockStyle.Fill, Text = link.WindowTitlePrefix ?? "" };
+        var edgesLabel = new Label { Dock = DockStyle.Fill, Text = "Trim from edges (characters, e.g. - or -())" };
+        var edges = new TextBox { Dock = DockStyle.Fill, Text = link.TrimEdges ?? "" };
+        var windowLabel = new Label { Dock = DockStyle.Fill, Text = "Current window title (select text to copy)" };
         var windowTitle = Detection.Scan(true).FirstOrDefault(game => string.Equals(game.Exe, link.Exe, StringComparison.OrdinalIgnoreCase))?.Caption;
-        var windowText = new TextBox { Left = 10, Top = 259, Width = 340, ReadOnly = true,
+        var windowText = new TextBox { Dock = DockStyle.Fill, ReadOnly = true, Multiline = true, ScrollBars = ScrollBars.Vertical,
             Text = windowTitle ?? "", PlaceholderText = "Game is not running" };
-        var resultLabel = new Label { Left = 10, Top = 290, Width = 340, Text = "Result" };
-        var resultText = new TextBox { Left = 10, Top = 314, Width = 340, ReadOnly = true };
+        var resultLabel = new Label { Dock = DockStyle.Fill, Text = "Result" };
+        var resultText = new TextBox { Dock = DockStyle.Fill, ReadOnly = true, Multiline = true, ScrollBars = ScrollBars.Vertical };
         void UpdateResult()
         {
             var draft = link with { CustomProgress = mode.SelectedIndex == 0 ? null : text.Text,
@@ -481,9 +542,23 @@ public sealed class MainForm : Form
         edges.TextChanged += (_, _) => UpdateResult();
         mode.SelectedIndexChanged += (_, _) => { text.Enabled = mode.SelectedIndex == 1; remove.Enabled = prefix.Enabled = edges.Enabled = mode.SelectedIndex == 0; };
         mode.SelectedIndex = link.CustomProgress == null ? 0 : 1;
-        var save = new Button { Text = "Save", Left = 194, Top = 351, Width = 75, DialogResult = DialogResult.OK };
-        var cancel = new Button { Text = "Cancel", Left = 275, Top = 351, Width = 75, DialogResult = DialogResult.Cancel };
-        dialog.Controls.AddRange([mode, text, removeLabel, remove, prefixLabel, prefix, edgesLabel, edges, windowLabel, windowText, resultLabel, resultText, save, cancel]); dialog.AcceptButton = save; dialog.CancelButton = cancel;
+        var save = new Button { Text = "Save", Width = 85, Height = 28, DialogResult = DialogResult.OK };
+        var cancel = new Button { Text = "Cancel", Width = 85, Height = 28, DialogResult = DialogResult.Cancel };
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(10), ColumnCount = 1, RowCount = 5 };
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 30)); root.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 196)); root.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); root.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+        var cleanupGroup = new GroupBox { Text = "Automatic cleanup", Dock = DockStyle.Fill, Padding = new Padding(8) };
+        var cleanup = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 6 };
+        for (var i = 0; i < 3; i++) { cleanup.RowStyles.Add(new RowStyle(SizeType.Absolute, 24)); cleanup.RowStyles.Add(new RowStyle(SizeType.Percent, 33.33f)); }
+        cleanup.Controls.AddRange([removeLabel, remove, prefixLabel, prefix, edgesLabel, edges]); cleanupGroup.Controls.Add(cleanup);
+        var previewGroup = new GroupBox { Text = "Preview", Dock = DockStyle.Fill, Padding = new Padding(8) };
+        var preview = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4 };
+        preview.RowStyles.Add(new RowStyle(SizeType.Absolute, 24)); preview.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+        preview.RowStyles.Add(new RowStyle(SizeType.Absolute, 24)); preview.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+        preview.Controls.AddRange([windowLabel, windowText, resultLabel, resultText]); previewGroup.Controls.Add(preview);
+        var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = false, Margin = Padding.Empty };
+        buttons.Controls.AddRange([cancel, save]); root.Controls.AddRange([mode, text, cleanupGroup, previewGroup, buttons]); dialog.Controls.Add(root);
+        dialog.AcceptButton = save; dialog.CancelButton = cancel;
         UpdateResult();
         if (dialog.ShowDialog(this) != DialogResult.OK) return;
         var updated = link with { CustomProgress = mode.SelectedIndex == 0 ? null : text.Text.Trim(),
@@ -496,12 +571,13 @@ public sealed class MainForm : Form
     private void EditCover()
     {
         if (library.SelectedItem is not GameLink link) { Error("Select a game first."); return; }
-        using var dialog = new Form { Text = "Cover", Icon = Program.AppIcon, ClientSize = new Size(610, 355), Font = Font,
+        using var dialog = new Form { Text = "Cover", Icon = Program.AppIcon, ClientSize = new Size(900, 430), MinimumSize = new Size(800, 410), Font = Font,
             StartPosition = FormStartPosition.CenterParent, MinimizeBox = false, MaximizeBox = false,
-            FormBorderStyle = FormBorderStyle.FixedDialog };
+            FormBorderStyle = FormBorderStyle.Sizable };
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(10), ColumnCount = 1, RowCount = 4 };
         using var cancelLoad = CancellationTokenSource.CreateLinkedTokenSource(shutdown.Token);
-        var choices = new ListBox { Left = 10, Top = 10, Width = 370, Height = 265, IntegralHeight = false, HorizontalScrollbar = true };
-        var preview = new PictureBox { Left = 390, Top = 10, Width = 210, Height = 265, SizeMode = PictureBoxSizeMode.Zoom };
+        var choices = new ListBox { Dock = DockStyle.Fill, IntegralHeight = false, HorizontalScrollbar = true };
+        var preview = new PictureBox { Dock = DockStyle.Fill, SizeMode = PictureBoxSizeMode.Zoom };
         preview.Paint += (_, e) =>
         {
             if (preview.Image is not Image image) return;
@@ -518,7 +594,18 @@ public sealed class MainForm : Form
             using var border = new Pen(Color.White, 2);
             e.Graphics.DrawRectangle(border, crop.X, crop.Y, crop.Width, crop.Height);
         };
-        var message = new Label { Left = 10, Top = 322, Width = 590, Text = "Loading release covers…" };
+        var message = new Label { Dock = DockStyle.Fill, AutoEllipsis = true, TextAlign = ContentAlignment.MiddleLeft, Text = "Loading release covers…" };
+        using var communityHttp = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(20) };
+        var community = new Button { Text = "Community covers", Width = 160, Height = 28 };
+        var communityGroup = new GroupBox { Text = "Community covers", Dock = DockStyle.Fill, Padding = new Padding(8), Visible = false };
+        var shared = new ListBox { Dock = DockStyle.Fill, IntegralHeight = false, HorizontalScrollbar = true };
+        var removeUpload = new Button { Text = "Remove upload", Width = 120, Height = 28, Enabled = false };
+        var sharedLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1 };
+        sharedLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); sharedLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 130));
+        sharedLayout.Controls.Add(shared); sharedLayout.Controls.Add(removeUpload); communityGroup.Controls.Add(sharedLayout);
+        var ownership = new HashSet<string>();
+        CoverChoice? chosen = null;
+        bool removing = false;
         var customImage = link.CustomCover ?? (link.Cover is { Thumbnail: null } ? link.Cover : null);
         CoverChoice? customChoice = customImage == null ? null : new("Custom image", customImage);
         void SetCustomImage(VnImage image)
@@ -530,7 +617,7 @@ public sealed class MainForm : Form
             else choices.Items[index] = customChoice;
             choices.SelectedIndex = index;
         }
-        var custom = new Button { Text = "Custom image...", Left = 10, Top = 285, Width = 100 };
+        var custom = new Button { Text = "Custom image...", Width = 125, Height = 28 };
         custom.Click += (_, _) =>
         {
             using var input = new Form { Text = "Custom image", Icon = Program.AppIcon, ClientSize = new Size(440, 110), Font = Font,
@@ -560,14 +647,14 @@ public sealed class MainForm : Form
             input.Controls.AddRange([label, url, add, dismiss]); input.AcceptButton = add; input.CancelButton = dismiss;
             input.ShowDialog(dialog);
         };
-        var save = new Button { Text = "Save", Left = 444, Top = 285, Width = 75, DialogResult = DialogResult.OK };
-        var cancel = new Button { Text = "Cancel", Left = 525, Top = 285, Width = 75, DialogResult = DialogResult.Cancel };
-        var adjust = new Button { Text = "Adjust...", Left = 120, Top = 285, Width = 85 };
+        var save = new Button { Text = "Save", Dock = DockStyle.Fill, DialogResult = DialogResult.OK };
+        var cancel = new Button { Text = "Cancel", Dock = DockStyle.Fill, DialogResult = DialogResult.Cancel };
+        var adjust = new Button { Text = "Adjust...", Width = 85, Height = 28 };
         adjust.Click += async (_, _) =>
         {
-            if (choices.SelectedItem is not CoverChoice choice || (choice.Image ?? link.Novel.Image) is not VnImage image)
+            if (chosen is not CoverChoice choice || (choice.Image ?? link.Novel.Image) is not VnImage image)
             { message.Text = "Select a cover first."; return; }
-            adjust.Enabled = choices.Enabled = custom.Enabled = save.Enabled = false;
+            adjust.Enabled = choices.Enabled = shared.Enabled = community.Enabled = custom.Enabled = save.Enabled = false;
             message.Text = "Loading full cover…";
             try
             {
@@ -575,23 +662,25 @@ public sealed class MainForm : Form
                 if (cancelLoad.IsCancellationRequested) return;
                 using var stream = new MemoryStream(bytes); using var source = Image.FromStream(stream);
                 if ((long)source.Width * source.Height > 25000000) throw new InvalidDataException("Cover is too large to edit.");
-                using var editor = new CoverEditor(source, link.Novel.Id);
+                using var editor = new CoverEditor(source, link.Novel.Id, settings);
                 if (editor.ShowDialog(dialog) == DialogResult.OK && editor.UploadedImage is VnImage uploaded)
                     SetCustomImage(uploaded);
                 message.Text = "Square = estimated Discord crop";
             }
             catch (Exception error) { if (!cancelLoad.IsCancellationRequested) message.Text = error.Message; }
-            finally { if (!cancelLoad.IsCancellationRequested) adjust.Enabled = choices.Enabled = custom.Enabled = save.Enabled = true; }
+            finally { if (!cancelLoad.IsCancellationRequested) adjust.Enabled = choices.Enabled = shared.Enabled = community.Enabled = custom.Enabled = save.Enabled = true; }
         };
         choices.Items.Add(new CoverChoice("Default", null));
         if (link.Cover != null && link.Cover != customImage) choices.Items.Add(new CoverChoice("Current cover", link.Cover));
         if (customChoice != null) choices.Items.Add(customChoice);
         var version = 0;
-        choices.SelectedIndexChanged += async (_, _) =>
+        async Task ShowChoice(CoverChoice choice)
         {
+            chosen = choice;
             var currentVersion = ++version;
             preview.Image?.Dispose(); preview.Image = null;
-            if (choices.SelectedItem is not CoverChoice choice || (choice.Image ?? link.Novel.Image) is not VnImage image) return;
+            removeUpload.Enabled = shared.SelectedItem is CoverChoice own && own.Image != null && ownership.Contains(own.Image.Url);
+            if ((choice.Image ?? link.Novel.Image) is not VnImage image) return;
             try
             {
                 var bytes = await vndb.PreviewImage(image.Thumbnail ?? image.Url, cancelLoad.Token);
@@ -601,27 +690,87 @@ public sealed class MainForm : Form
             }
             catch (Exception e) when (e is HttpRequestException or OperationCanceledException or ArgumentException)
             { if (!cancelLoad.IsCancellationRequested) message.Text = "Preview unavailable"; }
+        }
+        choices.SelectedIndexChanged += async (_, _) =>
+        {
+            if (choices.SelectedItem is not CoverChoice choice) return;
+            shared.ClearSelected(); await ShowChoice(choice);
         };
-        choices.SelectedIndex = link.Cover == null ? 0 : 1;
+        shared.SelectedIndexChanged += async (_, _) =>
+        {
+            if (shared.SelectedItem is not CoverChoice choice) { removeUpload.Enabled = false; return; }
+            choices.ClearSelected(); await ShowChoice(choice);
+        };
+        async Task LoadCommunity()
+        {
+            if (CoverImages.UploadEndpoint is not Uri endpoint) { message.Text = "Community covers are unavailable."; return; }
+            community.Enabled = false; shared.Items.Clear(); ownership.Clear(); removeUpload.Enabled = false;
+            message.Text = "Loading community covers…";
+            try
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(endpoint, "/gallery/" + link.Novel.Id));
+                var owner = settings.CoverOwnerKey();
+                if (owner != null) request.Headers.Add("X-Cover-Owner", owner);
+                using var response = await communityHttp.SendAsync(request, cancelLoad.Token); response.EnsureSuccessStatusCode();
+                using var data = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancelLoad.Token));
+                if (cancelLoad.IsCancellationRequested) return;
+                var number = 0;
+                foreach (var item in data.RootElement.EnumerateArray().Take(40))
+                    if (CoverImages.HostedCover(item.GetProperty("url").GetString()) is Uri image)
+                    {
+                        var owned = item.TryGetProperty("canRemove", out var own) && own.ValueKind == JsonValueKind.True;
+                        if (owned) ownership.Add(image.AbsoluteUri);
+                        shared.Items.Add(new CoverChoice("Community cover " + ++number + (owned ? " (your upload)" : ""), new VnImage(image.AbsoluteUri, null)));
+                    }
+                message.Text = shared.Items.Count == 0 ? "No community covers yet." : "Select a community cover to preview it.";
+            }
+            catch (Exception e) { if (!cancelLoad.IsCancellationRequested) message.Text = "Community covers: " + e.Message; }
+            finally { if (!cancelLoad.IsCancellationRequested && !removing) community.Enabled = true; }
+        }
+        community.Click += async (_, _) =>
+        {
+            communityGroup.Visible = !communityGroup.Visible;
+            root.RowStyles[2].Height = communityGroup.Visible ? 185 : 0;
+            var area = Screen.FromControl(dialog).WorkingArea;
+            var height = Math.Max(430, dialog.ClientSize.Height + (communityGroup.Visible ? 185 : -185));
+            dialog.ClientSize = new Size(dialog.ClientSize.Width, Math.Min(height, area.Height - (dialog.Height - dialog.ClientSize.Height)));
+            dialog.Top = Math.Max(area.Top, Math.Min(dialog.Top, area.Bottom - dialog.Height));
+            if (communityGroup.Visible) await LoadCommunity();
+        };
+        removeUpload.Click += async (_, _) =>
+        {
+            if (shared.SelectedItem is not CoverChoice own || own.Image == null || !ownership.Contains(own.Image.Url)) return;
+            if (MessageBox.Show(dialog, "Delete this hosted upload? Anyone using this image URL may lose their cover.", "Remove upload",
+                MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
+            removing = true; removeUpload.Enabled = shared.Enabled = choices.Enabled = community.Enabled = custom.Enabled = adjust.Enabled = save.Enabled = cancel.Enabled = false;
+            try
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Delete, own.Image.Url);
+                request.Headers.Add("X-Cover-Owner", settings.CoverOwnerKey()!);
+                using var response = await communityHttp.SendAsync(request, cancelLoad.Token);
+                if (!response.IsSuccessStatusCode && response.StatusCode != System.Net.HttpStatusCode.NotFound)
+                    throw new HttpRequestException(response.StatusCode == System.Net.HttpStatusCode.Forbidden ? "Only the uploader can remove this image." : "Could not remove upload. Try again later.");
+                var deleted = own.Image.Url;
+                for (var i = 0; i < settings.Games.Count; i++)
+                {
+                    var game = settings.Games[i];
+                    settings.Games[i] = game with { Cover = game.Cover?.Url == deleted ? null : game.Cover, CustomCover = game.CustomCover?.Url == deleted ? null : game.CustomCover };
+                }
+                settings.Save(); link = settings.Games.First(g => g.Novel.Id == link.Novel.Id); RefreshLibrary();
+                if (customImage?.Url == deleted) { customImage = null; customChoice = null; }
+                foreach (var choice in choices.Items.Cast<CoverChoice>().Where(c => c.Image?.Url == deleted).ToArray()) choices.Items.Remove(choice);
+                if (chosen?.Image?.Url == deleted) choices.SelectedIndex = 0;
+                await LoadCommunity(); message.Text = "Upload deleted."; publishedKey = null; _ = Tick();
+            }
+            catch (Exception e) { if (!cancelLoad.IsCancellationRequested) message.Text = e.Message; }
+            finally
+            {
+                removing = false;
+                if (!cancelLoad.IsCancellationRequested) shared.Enabled = choices.Enabled = community.Enabled = custom.Enabled = adjust.Enabled = save.Enabled = cancel.Enabled = true;
+            }
+        };
         dialog.Shown += async (_, _) =>
         {
-            async Task LoadShared()
-            {
-                if (CoverImages.UploadEndpoint is not Uri endpoint) return;
-                try
-                {
-                    var url = new Uri(endpoint, "/gallery/" + link.Novel.Id);
-                    var json = await VndbClient.Http.GetStringAsync(url, cancelLoad.Token);
-                    using var data = JsonDocument.Parse(json);
-                    var number = 0;
-                    foreach (var item in data.RootElement.EnumerateArray().Take(40))
-                        if (CoverImages.HostedCover(item.GetProperty("url").GetString()) is Uri image && !cancelLoad.IsCancellationRequested)
-                            choices.Items.Add(new CoverChoice("Community cover " + ++number, new VnImage(image.AbsoluteUri, null)));
-                }
-                catch (Exception e) when (e is HttpRequestException or OperationCanceledException or JsonException or InvalidOperationException)
-                { if (!cancelLoad.IsCancellationRequested) message.Text = "Community covers unavailable"; }
-            }
-            var shared = LoadShared();
             try
             {
                 var images = await vndb.Covers(link.Novel.Id, cancelLoad.Token);
@@ -630,13 +779,27 @@ public sealed class MainForm : Form
                 message.Text = images.Count == 0 ? "No release covers found" : "Square = estimated Discord crop";
             }
             catch (Exception e) { if (!cancelLoad.IsCancellationRequested) message.Text = "VNDB: " + e.Message; }
-            await shared;
         };
-        dialog.FormClosing += (_, _) => cancelLoad.Cancel();
-        dialog.Controls.AddRange([choices, preview, message, custom, adjust, save, cancel]); dialog.AcceptButton = save; dialog.CancelButton = cancel;
+        dialog.FormClosing += (_, e) => { if (removing) e.Cancel = true; else cancelLoad.Cancel(); };
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); root.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 0)); root.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
+        var top = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = Padding.Empty };
+        top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); top.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 240));
+        var coversGroup = new GroupBox { Text = "Covers", Dock = DockStyle.Fill, Padding = new Padding(8) };
+        coversGroup.Controls.Add(choices);
+        var previewGroup = new GroupBox { Text = "Preview", Dock = DockStyle.Fill, Padding = new Padding(8) };
+        previewGroup.Controls.Add(preview); top.Controls.Add(coversGroup); top.Controls.Add(previewGroup);
+        var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Margin = Padding.Empty };
+        actions.Controls.AddRange([custom, adjust, community]);
+        var footer = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1, Margin = Padding.Empty };
+        footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); footer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 85)); footer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 85));
+        footer.Controls.Add(message); footer.Controls.Add(save); footer.Controls.Add(cancel);
+        root.Controls.Add(top); root.Controls.Add(actions); root.Controls.Add(communityGroup); root.Controls.Add(footer); dialog.Controls.Add(root);
+        dialog.AcceptButton = save; dialog.CancelButton = cancel;
+        dialog.PerformLayout(); choices.SelectedIndex = link.Cover == null ? 0 : 1;
         var result = dialog.ShowDialog(this);
         preview.Image?.Dispose(); preview.Image = null;
-        if (result != DialogResult.OK || choices.SelectedItem is not CoverChoice selected) return;
+        if (result != DialogResult.OK || chosen is not CoverChoice selected) return;
         var updated = link with { Cover = selected.Image, CustomCover = customImage };
         _ = MarkCoverUsed(updated);
         settings.Games[settings.Games.IndexOf(link)] = updated; settings.Save(); RefreshLibrary(); library.SelectedItem = updated;
@@ -724,7 +887,7 @@ public sealed class MainForm : Form
         catch (Exception e)
         {
             discord.Dispose(); publishedKey = null;
-            if (!closing) status.Text = e is OperationCanceledException ? "Discord timed out. Retrying…" : e.Message;
+            if (!closing) status.Text = DiscordRpc.StatusMessage(e);
         }
         finally { busy = false; }
     }

@@ -10,7 +10,7 @@ A lightweight Windows app that shows the visual novel you're playing on Discord,
 
 ## Install
 
-1. Download **VN.Presence.exe** from [Releases](https://github.com/denpa39/vndb-discord-rich-precense/releases/latest). Open it directly—no installer or ZIP.
+1. Download **VN.Presence.exe** from [Releases](https://github.com/denpa39/lightweight-vn-discord-rich-presence/releases/latest). Open it directly—no installer or ZIP.
 2. If prompted, install the [.NET 8 Desktop Runtime for Windows x64](https://dotnet.microsoft.com/en-us/download/dotnet/8.0), then reopen the app. Older .NET Framework 4.x isn't enough.
 3. Open Discord desktop and enable **Settings → Activity Privacy → Share your detected activities**.
 
@@ -41,9 +41,9 @@ Select a game → **Details...**:
 - **Window title prefix** handles a game name that differs from its VNDB title.
 - **Trim from edges** removes surrounding characters, such as `-()`.
 
-Check **Result**, then **Save**. Chapter changes keep the play timer running.
+Check **Result**, then **Save**. Resize the Details window for longer titles and text. Chapter changes keep the play timer running.
 
-<img src="docs/screenshots/details.png" alt="Details window with Automatic mode, cleanup options, HimaNatsu window title, and Festival Rumors chapter result" width="360">
+<img src="docs/screenshots/details.png" alt="Details window with Automatic mode, cleanup options, HimaNatsu window title, and Festival Rumors chapter result" width="680">
 
 ## Show the whole cover without cropping
 
@@ -59,7 +59,9 @@ Open **Cover...**, select a cover, then click **Adjust... → Fit whole cover**.
 
 Click **Upload & use**, then **Save** in the Cover window to apply it. The checkerboard represents transparency; it isn't included in the image. **Save image...** saves a PNG on your PC instead.
 
-You can also choose the main VNDB cover, a release cover, or a **Community cover** already uploaded by another user. **Custom image...** accepts a direct public image URL, and **Default** restores the main VNDB cover.
+Choose the main VNDB cover or a release cover from the main list. **Community covers** opens a separate list below it, where you can reuse covers uploaded by other users. **Custom image...** accepts a direct public image URL, and **Default** restores the main VNDB cover.
+
+Resize the Cover window to read longer release names. Uploading identical image bytes reuses the existing image.
 
 <details>
 <summary>Crop or blur a cover</summary>
@@ -75,6 +77,8 @@ Tick **Blur cover** to obscure artwork before sending it to Discord. It works wi
 </details>
 
 Uploaded covers are public. Blurring is optional; the app doesn't detect NSFW artwork automatically.
+
+To undo a new upload, open **Community covers**, select one marked **(your upload)**, and click **Remove upload**. This deletes the hosted image after confirmation; anyone using the same URL may lose their cover. Removal rights stay on this PC. Uploads made before this feature cannot be verified as yours.
 
 ## VNDB labels, votes, and your profile
 
@@ -93,7 +97,7 @@ Choose a rating, or type a decimal from **1.0 to 10.0** and press Enter. **Remov
 
 <img src="docs/screenshots/vote.png" alt="Vote dropdown with decimal input, the ten named ratings, and Remove vote" width="190">
 
-Wait for **Saved to VNDB** before quitting. If you see **Not saved**, change the value again to retry. **Refresh** loads website changes; **Disconnect** removes the saved token.
+Wait for **Saved to VNDB** before quitting. If you see **Not saved**, change the value again to retry. **Disconnect** removes the saved token.
 
 Tick **Show VNDB profile button** beside your username to add **Visit [username]'s VNDB profile** to your Discord activity. The link comes from your connected account. Other people can see your activity buttons; Discord hides them from their owner.
 

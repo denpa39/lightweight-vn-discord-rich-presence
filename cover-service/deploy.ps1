@@ -26,10 +26,12 @@ try {
     # Account-specific IDs stay in ignored local deployment config.
     $taskConfig.main = '../entry.mjs'
     $taskConfig | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath '.wrangler/deploy.json'
-    ((Get-Content -LiteralPath 'migrate-png.sql' -Raw) + "`n" + (Get-Content -LiteralPath 'migrate-usage.sql' -Raw) + "`n" + (Get-Content -LiteralPath 'images.sql' -Raw)) |
+    ((Get-Content -LiteralPath 'migrate-png.sql' -Raw) + "`n" + (Get-Content -LiteralPath 'migrate-usage.sql' -Raw) + "`n" + (Get-Content -LiteralPath 'migrate-owner.sql' -Raw) + "`n" + (Get-Content -LiteralPath 'images.sql' -Raw)) |
         Set-Content -LiteralPath '.wrangler/png-upgrade.sql'
-    ((Get-Content -LiteralPath 'migrate-usage.sql' -Raw) + "`n" + (Get-Content -LiteralPath 'images.sql' -Raw)) |
+    ((Get-Content -LiteralPath 'migrate-usage.sql' -Raw) + "`n" + (Get-Content -LiteralPath 'migrate-owner.sql' -Raw) + "`n" + (Get-Content -LiteralPath 'images.sql' -Raw)) |
         Set-Content -LiteralPath '.wrangler/usage-upgrade.sql'
+    ((Get-Content -LiteralPath 'migrate-owner.sql' -Raw) + "`n" + (Get-Content -LiteralPath 'images.sql' -Raw)) |
+        Set-Content -LiteralPath '.wrangler/owner-upgrade.sql'
     foreach ($taskBinding in $taskConfig.d1_databases) {
         $taskSchema = if ($taskBinding.binding -eq 'BUDGET') { 'schema.sql' } else { 'images.sql' }
         if ($taskBinding.binding -like 'IMAGES*') {
@@ -42,6 +44,8 @@ try {
                 $taskSchema = '.wrangler/png-upgrade.sql'
             } elseif ($taskOldSchema -and $taskOldSchema -notmatch 'last_used') {
                 $taskSchema = '.wrangler/usage-upgrade.sql'
+            } elseif ($taskOldSchema -and $taskOldSchema -notmatch '\bowner\b') {
+                $taskSchema = '.wrangler/owner-upgrade.sql'
             }
         }
         npx --yes wrangler@4.119.0 d1 execute $taskBinding.database_name --remote --file $taskSchema --config .wrangler/deploy.json

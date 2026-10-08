@@ -98,7 +98,6 @@ internal sealed class VndbAccountPanel : UserControl
     private readonly Settings settings;
     private readonly CancellationTokenSource shutdown = new();
     private readonly Button connect = new() { Text = "Connect VNDB", AutoSize = true };
-    private readonly Button refresh = new() { Text = "Refresh", AutoSize = true };
     private readonly Label message = new() { Dock = DockStyle.Fill, AutoEllipsis = true, Text = "Connect to edit your labels and vote." };
     private readonly Label connection = new() { Dock = DockStyle.Fill, AutoEllipsis = true, Text = "Not connected to VNDB" };
     private readonly CheckedListBox labels = new() { Dock = DockStyle.Fill, CheckOnClick = true, IntegralHeight = false };
@@ -120,7 +119,7 @@ internal sealed class VndbAccountPanel : UserControl
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5 };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 32)); root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 32)); root.RowStyles.Add(new RowStyle(SizeType.Absolute, 23)); root.RowStyles.Add(new RowStyle(SizeType.Absolute, 23));
-        var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false }; buttons.Controls.AddRange([connect, refresh]);
+        var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false }; buttons.Controls.Add(connect);
         var voteRow = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false };
         voteRow.Controls.Add(new Label { Text = "My vote", AutoSize = true, Padding = new Padding(0, 5, 0, 0) });
         voteRow.Controls.Add(vote);
@@ -174,7 +173,7 @@ internal sealed class VndbAccountPanel : UserControl
             dialog.Controls.AddRange([help, open, text, accept, cancel]); dialog.AcceptButton = accept; dialog.CancelButton = cancel;
             if (dialog.ShowDialog(FindForm()) == DialogResult.OK) await Connect(text.Text.Trim(), true);
         };
-        refresh.Click += async (_, _) => { if (!saveQueued || await SaveEntry()) await LoadEntry(); }; UpdateEnabled();
+        UpdateEnabled();
         if (!previewOnly && settings.VndbTokenProtected != null) HandleCreated += async (_, _) =>
         {
             try { await Connect(AccountToken.Unprotect(settings.VndbTokenProtected), false); }
@@ -183,8 +182,8 @@ internal sealed class VndbAccountPanel : UserControl
     }
     private void UpdateEnabled()
     {
-        connect.Enabled = !busy; refresh.Enabled = account != null && vnId != null && !busy;
-        labels.Enabled = vote.Enabled = refresh.Enabled && loadedId == vnId;
+        connect.Enabled = !busy;
+        labels.Enabled = vote.Enabled = account != null && vnId != null && !busy && loadedId == vnId;
         showProfile.Enabled = !busy && Settings.NormalizeProfileUrl(settings.ProfileUrl) != null;
     }
     internal void RefreshProfileChoice()

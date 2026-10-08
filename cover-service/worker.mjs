@@ -94,19 +94,44 @@ async function markUsed(database, hash) {
   await database.prepare("UPDATE covers SET last_used = ?, use_days = use_days + 1 WHERE hash = ? AND last_used < ?")
     .bind(now, hash, now - 86400).run();
 }
+async function ownerHash(request) {
+  const key = request.headers.get("X-Cover-Owner");
+  if (key === null) return null;
+  if (!/^[a-f0-9]{64}$/.test(key)) throw new TypeError("Invalid ownership key");
+  return [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(key)))]
+    .map(b => b.toString(16).padStart(2, "0")).join("");
+}
 export async function handle(request, env) {
   const url = new URL(request.url);
   const gallery = /^\/gallery\/(v[1-9][0-9]{0,8})$/.exec(url.pathname);
   if (request.method === "GET" && gallery) {
     if (!(await env.USE_LIMIT.limit({ key: request.headers.get("CF-Connecting-IP") || "unknown" })).success)
       return new Response("Too many requests", { status: 429 });
+    let owner;
+    try { owner = await ownerHash(request); } catch { return new Response("Invalid ownership key", {status: 400}); }
     // ponytail: show up to 40 covers per game; add pagination if games outgrow it.
     const results = await Promise.all(Array.from({length: SHARDS}, (_, i) => env[`IMAGES${i}`]
-      .prepare("SELECT covers.hash, format, use_days, last_used FROM game_covers JOIN covers USING(hash) WHERE game = ? ORDER BY use_days DESC, last_used DESC LIMIT 40")
+      .prepare("SELECT covers.hash, format, use_days, last_used, owner FROM game_covers JOIN covers USING(hash) WHERE game = ? ORDER BY use_days DESC, last_used DESC LIMIT 40")
       .bind(gallery[1]).all()));
     const covers = results.flatMap(r => r.results).sort((a,b) => b.use_days-a.use_days || b.last_used-a.last_used).slice(0,40);
-    return Response.json(covers.map(c => ({url: `${url.origin}/covers/${c.hash}.${c.format}`})),
-      {headers: {"Cache-Control": "public, max-age=60"}});
+    return Response.json(covers.map(c => ({url: `${url.origin}/covers/${c.hash}.${c.format}`, ...(owner ? {canRemove: c.owner === owner} : {})})),
+      {headers: {"Cache-Control": "no-store"}});
+  }
+  if (request.method === "DELETE") {
+    const match = /^\/covers\/([a-f0-9]{64})\.(jpg|png)$/.exec(url.pathname);
+    if (!match) return new Response("Not found", {status: 404});
+    if (!(await env.USE_LIMIT.limit({key: request.headers.get("CF-Connecting-IP") || "unknown"})).success)
+      return new Response("Too many requests", {status: 429});
+    let owner;
+    try { owner = await ownerHash(request); } catch { return new Response("Invalid ownership key", {status: 400}); }
+    if (!owner) return new Response("Not your upload", {status: 403});
+    const database = imageDb(env, match[1]);
+    const object = await database.prepare("SELECT format, owner FROM covers WHERE hash = ?").bind(match[1]).first();
+    if (!object || object.format !== match[2]) return new Response("Not found", {status: 404});
+    if (object.owner !== owner) return new Response("Not your upload", {status: 403});
+    await database.prepare("DELETE FROM covers WHERE hash = ? AND format = ? AND owner = ?")
+      .bind(match[1], match[2], owner).run();
+    return new Response(null, {status: 204});
   }
   if (request.method === "POST" && /^\/covers\/[a-f0-9]{64}\.(jpg|png)$/.test(url.pathname)) {
     if (!(await env.USE_LIMIT.limit({ key: request.headers.get("CF-Connecting-IP") || "unknown" })).success)
@@ -138,6 +163,8 @@ export async function handle(request, env) {
   }
   if (url.pathname !== "/upload") return new Response("Not found", { status: 404 });
   if (request.method !== "POST") return new Response("Method not allowed", { status: 405, headers: { Allow: "POST" } });
+  let owner;
+  try { owner = await ownerHash(request); } catch { return new Response("Invalid ownership key", {status: 400}); }
   const game = request.headers.get("X-VNDB-ID");
   if (game !== null && !/^v[1-9][0-9]{0,8}$/.test(game)) return new Response("Invalid game ID", {status: 400});
   // ponytail: anonymous cover uploads; IP limits can also affect users sharing a connection.
@@ -161,8 +188,8 @@ export async function handle(request, env) {
     if (!reserved) return new Response("Cover hosting upload limit reached", { status: 503 });
     // SQLite triggers evict inactive covers in this shard and insert atomically.
     // ponytail: hash chooses one storage slot; deleting in another slot cannot free this one.
-    await database.prepare("INSERT OR IGNORE INTO covers (hash, size, data, format) VALUES (?, ?, ?, ?)")
-      .bind(hash, bytes.length, encode(bytes), format).run();
+    await database.prepare("INSERT OR IGNORE INTO covers (hash, size, data, format, owner) VALUES (?, ?, ?, ?, ?)")
+      .bind(hash, bytes.length, encode(bytes), format, owner).run();
   } else await markUsed(database, hash);
   if (game) await database.prepare("INSERT OR IGNORE INTO game_covers (game, hash) VALUES (?, ?)").bind(game, hash).run();
   return Response.json({ url: `${url.origin}/${key}` });

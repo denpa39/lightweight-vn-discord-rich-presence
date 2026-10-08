@@ -17,6 +17,11 @@ internal static class SelfTests
                 VotePicker.TryVote("10", out var topVote) && topVote == 100 && VotePicker.TryVote("", out var noVote) && noVote == null &&
                 !VotePicker.TryVote("5.66", out _) && !VotePicker.TryVote("11", out _) && !VotePicker.TryVote("bad", out _),
                 "Vote picker accepts decimal ratings and clearing, rejecting invalid scores");
+            Check(new[] { 109, 232, 233 }.All(code => DiscordRpc.StatusMessage(new IOException("Raw pipe error", unchecked((int)0x80070000) | code)) == "Discord is not running.") &&
+                DiscordRpc.StatusMessage(new EndOfStreamException()) == "Discord is not running." &&
+                DiscordRpc.StatusMessage(new IOException("Discord rejected the connection.")) == "Discord rejected the connection." &&
+                DiscordRpc.StatusMessage(new OperationCanceledException()) == "Discord timed out. Retrying…",
+                "Discord pipe failures show a friendly status without hiding other errors");
             TestAccount().GetAwaiter().GetResult();
             report.Add("PASS VNDB account authentication, label changes, voting and encrypted token storage");
             Check(ActivityPreview.FormatTime(3752) == "1:02:32" && ActivityPreview.FormatTime(59) == "0:59" &&
@@ -318,7 +323,7 @@ internal static class SelfTests
     {
         const string token = "hsoo-ybws4-j8yb9-qxkw-5obay-px8to-bfyk";
         var encrypted = AccountToken.Protect(token);
-        if (encrypted.Contains(token) || AccountToken.Unprotect(encrypted) != token || new Settings { VndbTokenProtected = encrypted }.Export().Contains("VndbToken")) throw new Exception("Token encryption or export isolation failed");
+        if (encrypted.Contains(token) || AccountToken.Unprotect(encrypted) != token || new Settings { VndbTokenProtected = encrypted }.Export().Contains("VndbToken") || new Settings { CoverOwnerProtected = encrypted }.Export().Contains("CoverOwner")) throw new Exception("Token encryption or export isolation failed");
         using var handler = new AccountHandler(); using var http = new HttpClient(handler);
         var account = new VndbAccount(token, http); await account.Connect(CancellationToken.None);
         var labels = await account.Labels(CancellationToken.None); var entry = await account.Read("v1", CancellationToken.None);
@@ -375,12 +380,14 @@ internal static class SelfTests
         internal System.Net.HttpStatusCode Status = System.Net.HttpStatusCode.OK;
         internal byte[]? Bytes;
         internal string? GameId;
+        internal string? OwnerKey;
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
         {
             if (request.Method != HttpMethod.Post || request.Content?.Headers.ContentType?.MediaType != "image/png")
                 throw new Exception("Upload must contain only PNG pixels");
             Bytes = await request.Content.ReadAsByteArrayAsync();
             GameId = request.Headers.TryGetValues("X-VNDB-ID", out var values) ? values.Single() : null;
+            OwnerKey = request.Headers.TryGetValues("X-Cover-Owner", out var owners) ? owners.Single() : null;
             return new(Status) { Content = new StringContent(JsonSerializer.Serialize(new { url = Url })) };
         }
     }
@@ -392,8 +399,8 @@ internal static class SelfTests
             throw new Exception("Upload endpoint validation");
         using var handler = new CoverUploadHandler(); using var http = new HttpClient(handler);
         var endpoint = new Uri("https://covers.example/upload");
-        var result = await CoverImages.Upload(http, endpoint, bytes, CancellationToken.None, "v17");
-        if (handler.GameId != "v17") throw new Exception("Uploaded covers must identify their game for reuse");
+        var result = await CoverImages.Upload(http, endpoint, bytes, CancellationToken.None, "v17", new string('a', 64));
+        if (handler.GameId != "v17" || handler.OwnerKey != new string('a', 64)) throw new Exception("Uploaded covers must identify their game and include the ownership key");
         if (CoverImages.UploadEndpoint is Uri configured)
         {
             var valid = new Uri(configured, "/covers/" + new string('a', 64) + ".png").AbsoluteUri;

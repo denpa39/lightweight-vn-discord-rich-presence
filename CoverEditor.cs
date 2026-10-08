@@ -85,7 +85,7 @@ internal static class CoverImages
         if (stream.Length > MaxUploadBytes) throw new InvalidDataException("Image is too large to upload.");
         return stream.ToArray();
     }
-    internal static async Task<VnImage> Upload(HttpClient http, Uri endpoint, byte[] bytes, CancellationToken token, string? gameId = null)
+    internal static async Task<VnImage> Upload(HttpClient http, Uri endpoint, byte[] bytes, CancellationToken token, string? gameId = null, string? ownerKey = null)
     {
         if (Endpoint(endpoint.AbsoluteUri) == null || bytes.Length == 0 || bytes.Length > MaxUploadBytes)
             throw new InvalidDataException("Invalid cover upload.");
@@ -95,6 +95,7 @@ internal static class CoverImages
         content.Headers.ContentType = new MediaTypeHeaderValue("image/png");
         using var request = new HttpRequestMessage(HttpMethod.Post, endpoint) { Content = content };
         if (gameId != null) request.Headers.Add("X-VNDB-ID", gameId);
+        if (ownerKey != null) request.Headers.Add("X-Cover-Owner", ownerKey);
         using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, token);
         if (!response.IsSuccessStatusCode)
             throw new HttpRequestException(response.StatusCode switch
@@ -145,7 +146,7 @@ internal sealed class CoverEditor : Form
     private readonly CheckBox blur = new() { Text = "Blur cover", Left = 390, Top = 230, AutoSize = true };
     private readonly Bitmap overview;
     internal RectangleF CropArea => CoverImages.Crop(source.Size, centerX, centerY, zoom.Value / 10f);
-    internal CoverEditor(Image source, string? gameId = null)
+    internal CoverEditor(Image source, string? gameId = null, Settings? settings = null)
     {
         this.source = source;
         centerX = source.Width / 2f; centerY = source.Height / 2f;
@@ -156,7 +157,7 @@ internal sealed class CoverEditor : Form
         var save = new Button { Text = "Save image...", Left = 10, Top = 460, Width = 110 };
         var reset = new Button { Text = "Reset", Left = 390, Top = 186, Width = 75 };
         Controls.AddRange([preview, fit, crop, zoom, status, upload, close, save, reset, blur,
-            new Label { Text = "Drag the square.\nScroll to zoom.\nArrow keys move it too.", Left = 390, Top = 80, Width = 180, Height = 44 },
+            new Label { Text = "Drag to move\nScroll to zoom", Left = 390, Top = 80, Width = 180, Height = 32 },
             new Label { Text = "Zoom", Left = 390, Top = 122, Width = 170 }]);
         // Cache a small overview once. Dragging never resizes the full source image.
         var scale = Math.Min(1, 512f / Math.Max(source.Width, source.Height));
@@ -245,7 +246,7 @@ internal sealed class CoverEditor : Form
             {
                 using var http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(60) };
                 using var output = CoverImages.Render(source, fit.Checked, CropArea, blur: blur.Checked);
-                UploadedImage = await CoverImages.Upload(http, endpoint, CoverImages.Encode(output), cancel.Token, gameId);
+                UploadedImage = await CoverImages.Upload(http, endpoint, CoverImages.Encode(output), cancel.Token, gameId, settings?.CoverOwnerKey(true));
                 if (!cancel.IsCancellationRequested) DialogResult = DialogResult.OK;
             }
             catch (Exception error) { if (!cancel.IsCancellationRequested) status.Text = error is OperationCanceledException ? "Upload timed out. Try again." : error.Message; }

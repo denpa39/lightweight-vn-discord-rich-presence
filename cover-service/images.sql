@@ -4,7 +4,8 @@ CREATE TABLE IF NOT EXISTS covers (
   data TEXT NOT NULL,
   format TEXT NOT NULL DEFAULT 'jpg' CHECK (format IN ('jpg', 'png')),
   last_used INTEGER NOT NULL DEFAULT (unixepoch()),
-  use_days INTEGER NOT NULL DEFAULT 0
+  use_days INTEGER NOT NULL DEFAULT 0,
+  owner TEXT CHECK (owner IS NULL OR length(owner) = 64)
 );
 CREATE INDEX IF NOT EXISTS cover_usage ON covers(last_used, use_days);
 CREATE TABLE IF NOT EXISTS game_covers (
