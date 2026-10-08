@@ -149,7 +149,7 @@ internal sealed class CoverEditor : Form
     {
         this.source = source;
         centerX = source.Width / 2f; centerY = source.Height / 2f;
-        Text = "Adjust cover"; Font = new Font(Program.UiFontName, 9); ClientSize = new(580, 500);
+        Text = "Adjust cover"; Icon = Program.AppIcon; Font = new Font(Program.UiFontName, 9); ClientSize = new(580, 500);
         FormBorderStyle = FormBorderStyle.FixedDialog; StartPosition = FormStartPosition.CenterParent;
         MinimizeBox = false; MaximizeBox = false;
         var close = new Button { Text = "Cancel", Left = 475, Top = 460, Width = 90, DialogResult = DialogResult.Cancel };

@@ -163,7 +163,7 @@ internal sealed class VndbAccountPanel : UserControl
                 catch (Exception e) { settings.VndbTokenProtected = previous; message.Text = e.Message; }
                 UpdateEnabled(); ProfileChanged?.Invoke(); return;
             }
-            using var dialog = new Form { Text = "Connect VNDB", ClientSize = new Size(390, 210), FormBorderStyle = FormBorderStyle.FixedDialog,
+            using var dialog = new Form { Text = "Connect VNDB", Icon = Program.AppIcon, ClientSize = new Size(390, 210), FormBorderStyle = FormBorderStyle.FixedDialog,
                 StartPosition = FormStartPosition.CenterParent, MinimizeBox = false, MaximizeBox = false };
             var help = new Label { Text = "Create a token and enable both permissions:\n• Access private items on my list\n• Add/remove/edit items on my list\nThen copy the token and paste it below.", Left = 12, Top = 12, Width = 365, Height = 66 };
             var open = new LinkLabel { Text = "Create token on VNDB", Left = 12, Top = 84, Width = 365 };

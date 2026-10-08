@@ -25,7 +25,7 @@ internal sealed class GuideForm : Form
 
     public GuideForm()
     {
-        Text = "VN Presence guide"; Font = new Font(Program.UiFontName, 9);
+        Text = "VN Presence guide"; Icon = Program.AppIcon; Font = new Font(Program.UiFontName, 9);
         ClientSize = new Size(660, 410); MinimumSize = new Size(650, 440);
         StartPosition = FormStartPosition.CenterParent; MinimizeBox = false; MaximizeBox = false;
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(10), ColumnCount = 2, RowCount = 2 };

@@ -1,94 +1,108 @@
 # VN Presence
 
-A small Windows app that shares your visual novel on Discord, with its native title, brand, cover, and game details from the window title.
+A lightweight Windows app that shows the visual novel you're playing on Discord, with its title, studio, cover, game details, and elapsed time.
+
+**Under 1 MB · Native Windows UI · Runs in the tray**
+
+<img src="docs/screenshots/overview.png" alt="VN Presence with a game library, Discord activity preview, and VNDB labels and vote" width="900">
+
+*Screenshots feature HimaNatsu; labels and the vote illustrate the account controls.*
 
 ## Install
 
-Download **VN.Presence.exe** from [Releases](https://github.com/denpa39/vndb-discord-rich-precense/releases/latest) and open it. No installer or extraction needed.
+1. Download **VN.Presence.exe** from [Releases](https://github.com/denpa39/vndb-discord-rich-precense/releases/latest). Open it directly—no installer or ZIP.
+2. If prompted, install the [.NET 8 Desktop Runtime for Windows x64](https://dotnet.microsoft.com/en-us/download/dotnet/8.0), then reopen the app. Older .NET Framework 4.x isn't enough.
+3. Open Discord desktop and enable **Settings → Activity Privacy → Share your detected activities**.
 
-- Windows 10 or 11, 64-bit.
-- [.NET 8 Desktop Runtime for Windows x64](https://dotnet.microsoft.com/en-us/download/dotnet/8.0). Older .NET Framework 4.x does not replace it. If the runtime is missing, Windows prompts you to download it; install it and reopen the app.
-- Discord desktop running, with **Settings → Activity Privacy → Share your detected activities** enabled.
+Requires Windows 10 or 11, 64-bit. No Discord token or Developer Portal setup needed.
 
-No Discord token, Developer Portal setup, or Cloudflare account is needed.
-
-## Add and manage games
+## Add your games
 
 1. Start your game and click **Add...**.
-2. Select its window, or use **Browse...** to choose its executable.
-3. Check the search title, or paste the game's VNDB URL. Click **Search**.
+2. Select its window, or click **Browse...** to choose its executable.
+3. Check the title, or paste the game's VNDB URL, then click **Search**.
 4. Select the matching result and click **Link**.
 
-Recognized version, age, and progress suffixes are removed from the search title automatically; you can edit it before searching. Already linked games and executables cannot be added twice.
+<img src="docs/screenshots/add-game.png" alt="Add game window showing the executable, search title, matching VNDB result, and Link button" width="660">
 
-The dropdown above the game list offers **Added**, **Alphabetical**, and **Last played**. Your choice is saved. Last played tracking starts with this version; games without a recorded session appear below played games.
+Use the dropdown above your library to sort by **Added**, **Alphabetical**, or **Last played**. Your choice is saved. Last played history starts when the app records a session.
 
-**Remove** asks for confirmation. **More... → Change executable...** updates a moved game's path without losing its customizations.
+Moved a game? Use **More... → Change executable...**. **Remove** asks for confirmation.
 
-## Details and Discord preview
+## Discord preview and details
+
+The preview shows your game's cover, title, studio, details, timer, and buttons. **View on VNDB** links to its game page. Discord may arrange the activity differently on desktop and mobile.
 
 Select a game → **Details...**:
 
-- **Automatic** extracts details from its window title.
-- **Custom** shows your text. Leave it blank to hide the details line.
-- **Remove text** deletes phrases separated with `;`, such as `Ver1.0.0; R18`.
-- **Trim from edges** removes surrounding characters only: `-` preserves internal hyphens, and `-()` also removes outer parentheses.
+- **Automatic** reads details from the game's window title, such as its current chapter.
+- **Custom** shows your own text. Leave it blank to hide the details line.
+- **Remove text** removes unwanted phrases; separate them with `;`.
 - **Window title prefix** handles a game name that differs from its VNDB title.
+- **Trim from edges** removes surrounding characters, such as `-()`.
 
-Copy from **Current window title**, check **Result**, then **Save**. Spaces and punctuation stay unless your rules remove them; outer whitespace is trimmed.
+Check **Result**, then **Save**. Chapter changes keep the play timer running.
 
-The preview on the right uses the same activity data as Discord. It shows the game, brand, cover, details, elapsed time, and buttons. Its height stays fixed when the profile button is toggled. Discord desktop and mobile may arrange the activity differently.
+<img src="docs/screenshots/details.png" alt="Details window with Automatic mode, cleanup options, HimaNatsu window title, and Festival Rumors chapter result" width="360">
 
-**View on VNDB** opens the game page. The cover also links to the game, and the brand links to its producer page; multiple producers link to the game page. Chapter changes keep the play timer running.
+## Show the whole cover without cropping
 
-## Covers, crop, and blur
+Discord normally displays cover artwork in a square. **Fit whole cover** keeps the entire image visible by adding transparent padding, whether the cover is tall or wide. The artwork isn't stretched or cut off.
 
-Open **Cover...** to choose the main VNDB cover, a release cover, or a **Community cover** uploaded for that game. Community covers reuse the existing image without another upload. **Custom image...** accepts a direct public image URL. **Default** restores the main VNDB cover.
+| Fit whole cover | Square crop |
+| --- | --- |
+| <img src="docs/screenshots/fit-result.png" alt="Entire HimaNatsu cover inside a square with transparent padding above and below; both sides remain visible" width="240"> | <img src="docs/screenshots/crop-result.png" alt="Square crop of the same HimaNatsu cover, cutting off artwork at the sides" width="240"> |
 
-Choose a cover → **Adjust...**:
+Open **Cover...**, select a cover, then click **Adjust... → Fit whole cover**.
 
-- **Fit whole cover** keeps everything with transparent padding.
-- **Crop** keeps the white square. Drag or use arrow keys to move it; scroll or use **Zoom** to resize it.
-- **Blur cover** softens artwork before it is saved or uploaded. This is optional, not automatic NSFW detection.
-- **Reset** recenters the crop and resets zoom.
+<img src="docs/screenshots/cover-fit.png" alt="Adjust cover window with Fit whole cover selected and the entire cover visible between transparent checkerboard margins" width="580">
 
-**Upload & use**, then **Save** in the Cover window, applies the hosted PNG. **Save image...** saves a PNG on your PC instead. The checkerboard is only a transparency preview.
+Click **Upload & use**, then **Save** in the Cover window to apply it. The checkerboard represents transparency; it isn't included in the image. **Save image...** saves a PNG on your PC instead.
 
-Uploads are public. The finished image and public VNDB game ID are sent to the cover service; game paths, account tokens, and profile details are not sent. Matching image bytes share one stored file.
+You can also choose the main VNDB cover, a release cover, or a **Community cover** already uploaded by another user. **Custom image...** accepts a direct public image URL, and **Default** restores the main VNDB cover.
 
-The shared service uses Cloudflare Workers/D1 Free. Images stay while storage has room. At capacity, it removes only enough of the least recently used covers to fit the upload, using recorded usage days to break ties. There is **no fixed expiry or daily deletion**. Active cover use renews its usage date. Daily service limits can still stop requests or uploads; deleted covers need uploading again. [Hosting details](cover-service/README.md).
+<details>
+<summary>Crop or blur a cover</summary>
 
-## VNDB account, labels, and votes
+Choose **Crop** to keep the area inside the white square. Drag or use arrow keys to move it; scroll or use **Zoom** to resize it. **Reset** starts the crop over.
 
-Click **Connect VNDB** below the preview. Create a token at [VNDB Applications](https://vndb.org/u/tokens) with both permissions:
+<img src="docs/screenshots/cover-crop.png" alt="Crop mode showing a white square and shaded areas that will be removed" width="580">
+
+Tick **Blur cover** to obscure artwork before sending it to Discord. It works with both fit and crop. Click **Upload & use**, then **Save** to apply it.
+
+<img src="docs/screenshots/cover-blur.png" alt="Adjust cover with Blur cover enabled and the artwork blurred in the preview" width="580">
+
+</details>
+
+Uploaded covers are public. Blurring is optional; the app doesn't detect NSFW artwork automatically.
+
+## VNDB labels, votes, and your profile
+
+Click **Connect VNDB**. Create a token at [VNDB Applications](https://vndb.org/u/tokens) with both permissions:
 
 - **Access private items on my list**
 - **Add/remove/edit items on my list**
 
-Paste the token and connect. Your password stays on VNDB; Windows encrypts the saved token for your Windows user.
+Paste the token and connect. Your password stays on VNDB.
 
-Select a game to load its labels and vote. **Changes save automatically**. Choosing Playing, Finished, Stalled, or Dropped clears the other progress labels. Pick a rating or type a decimal from **1.0 to 10.0** and press Enter. **Remove vote** clears an existing score.
+Select a game to load its labels and vote. **Changes save automatically**—there's no Save button. Choosing Playing, Finished, Stalled, or Dropped clears the other progress labels.
 
-**Connected as [username]** stays on its own line. Save progress and errors appear beneath it. Wait for **Saved to VNDB** before quitting. If an update fails, the status says **Not saved**; change the value again to retry. **Refresh** reloads website changes; **Disconnect** removes the saved token.
+<img src="docs/screenshots/account.png" alt="VNDB panel with all six labels, a decimal vote, profile button checkbox, and Saved to VNDB status" width="340">
 
-The **Show VNDB profile button** checkbox sits beside the connected username. It adds **Visit [username]'s VNDB profile** to your activity using the account's URL automatically. Uncheck it to hide the button while staying connected. Discord hides your own activity buttons from you; other people can see them.
+Choose a rating, or type a decimal from **1.0 to 10.0** and press Enter. **Remove vote** clears an existing score.
 
-## Tray, guide, and backups
+<img src="docs/screenshots/vote.png" alt="Vote dropdown with decimal input, the ten named ratings, and Remove vote" width="190">
 
-**Minimize** or **X** hides the app to the tray silently. Double-click its tray icon to reopen it; right-click → **Exit** to quit. **Pause** stops sharing until **Resume**. Closing the game clears its activity.
+Wait for **Saved to VNDB** before quitting. If you see **Not saved**, change the value again to retry. **Refresh** loads website changes; **Disconnect** removes the saved token.
 
-**Start with Windows** opens the app in the tray when you sign in. Keep the executable in the same folder; uncheck it to disable.
+Tick **Show VNDB profile button** beside your username to add **Visit [username]'s VNDB profile** to your Discord activity. The link comes from your connected account. Other people can see your activity buttons; Discord hides them from their owner.
 
-A skippable guide opens on first launch. **More... → Guide** reopens it anytime.
+## Tray, startup, and backups
 
-Settings use one file across versions: `%LOCALAPPDATA%\VnPresence\settings.json`. **More... → Export settings... / Import settings...** transfers games, customizations, profile preferences, sorting, and recorded play dates. Import replaces them after confirmation. Exports include game paths and your profile, but exclude the VNDB token; connect again on another PC.
+- **Minimize** or **X** keeps the app running in the tray. Double-click its icon to reopen it; right-click → **Exit** to quit.
+- **Pause / Resume** controls sharing. Closing the game clears its activity.
+- **Start with Windows** launches it in the tray when you sign in. Keep the EXE in the same folder.
+- **More... → Guide** opens the built-in guide anytime.
+- **More... → Export settings... / Import settings...** transfers your games and preferences. Import replaces your current settings after confirmation. Connect VNDB again on another PC; the token isn't exported.
 
-## Build
-
-Requires the .NET 8 SDK on Windows. The app uses the installed Desktop Runtime; it does not bundle one.
-
-```powershell
-dotnet publish -c Release --source https://api.nuget.org/v3/index.json -o dist
-```
-
-For uploads and community covers, deploy [cover-service](cover-service/README.md) and build with `-p:CoverUploadEndpoint=https://YOUR-WORKER.workers.dev/upload`.
+Your settings carry across app updates.

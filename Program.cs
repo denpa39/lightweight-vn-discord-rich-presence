@@ -5,6 +5,7 @@ namespace VnPresence;
 internal static class Program
 {
     internal static readonly int ProcessId = Environment.ProcessId;
+    internal static readonly Icon AppIcon = Icon.ExtractAssociatedIcon(Environment.ProcessPath!) ?? SystemIcons.Application;
     internal static readonly string UiFontName = FontFamily.Families.Any(f => f.Name == "Meiryo UI") ? "Meiryo UI" : "Yu Gothic UI";
     [STAThread]
     private static void Main(string[] args)
@@ -172,7 +173,7 @@ public sealed class MainForm : Form
         Font = new Font(Program.UiFontName, 9);
         BackColor = SystemColors.Control;
         ForeColor = SystemColors.ControlText;
-        Icon = SystemIcons.Application;
+        Icon = Program.AppIcon;
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(8), ColumnCount = 1, RowCount = 3 };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
@@ -442,7 +443,7 @@ public sealed class MainForm : Form
     private void EditProgress()
     {
         if (library.SelectedItem is not GameLink link) { Error("Select a game first."); return; }
-        using var dialog = new Form { Text = "Details", ClientSize = new Size(360, 385), Font = Font,
+        using var dialog = new Form { Text = "Details", Icon = Program.AppIcon, ClientSize = new Size(360, 385), Font = Font,
             FormBorderStyle = FormBorderStyle.FixedDialog, StartPosition = FormStartPosition.CenterParent,
             MaximizeBox = false, MinimizeBox = false };
         var mode = new ComboBox { Left = 10, Top = 10, Width = 340, DropDownStyle = ComboBoxStyle.DropDownList };
@@ -490,7 +491,7 @@ public sealed class MainForm : Form
     private void EditCover()
     {
         if (library.SelectedItem is not GameLink link) { Error("Select a game first."); return; }
-        using var dialog = new Form { Text = "Cover", ClientSize = new Size(610, 355), Font = Font,
+        using var dialog = new Form { Text = "Cover", Icon = Program.AppIcon, ClientSize = new Size(610, 355), Font = Font,
             StartPosition = FormStartPosition.CenterParent, MinimizeBox = false, MaximizeBox = false,
             FormBorderStyle = FormBorderStyle.FixedDialog };
         using var cancelLoad = CancellationTokenSource.CreateLinkedTokenSource(shutdown.Token);
@@ -527,7 +528,7 @@ public sealed class MainForm : Form
         var custom = new Button { Text = "Custom image...", Left = 10, Top = 285, Width = 100 };
         custom.Click += (_, _) =>
         {
-            using var input = new Form { Text = "Custom image", ClientSize = new Size(440, 110), Font = Font,
+            using var input = new Form { Text = "Custom image", Icon = Program.AppIcon, ClientSize = new Size(440, 110), Font = Font,
                 FormBorderStyle = FormBorderStyle.FixedDialog, StartPosition = FormStartPosition.CenterParent,
                 MinimizeBox = false, MaximizeBox = false };
             var label = new Label { Left = 10, Top = 10, Width = 420, Text = "Direct image URL (leave blank to remove)" };
