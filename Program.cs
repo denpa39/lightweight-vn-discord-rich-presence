@@ -64,6 +64,7 @@ internal static class Program
                 .SelectMany(p => p.Controls.OfType<VotePicker>()).Single();
             votePicker.TestDropdown();
             SelfTests.TestAutoSave(content.Controls.OfType<TableLayoutPanel>().SelectMany(p => p.Controls.OfType<VndbAccountPanel>()).Single());
+            SelfTests.TestNotes(form);
             var addButton = content.Controls.OfType<TableLayoutPanel>().Single(p => p.Controls.OfType<ListBox>().Any())
                 .Controls.OfType<FlowLayoutPanel>().Single().Controls.OfType<Button>().Single(b => b.Text == "Add...");
             for (var i = 0; i < 2; i++)

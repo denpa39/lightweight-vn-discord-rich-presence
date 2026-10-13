@@ -1,0 +1,23 @@
+[package]
+name = "vn-presence"
+version = "2.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+native-windows-gui = { version = "1.0.13", default-features = false, features = ["frame", "file-dialog", "timer", "notice", "listbox", "combobox", "tray-notification", "menu", "cursor", "textbox", "image-decoder", "trackbar", "high-dpi", "embed-resource", "scroll-bar"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+regex = { version = "1", default-features = false, features = ["std", "unicode-case", "unicode-perl"] }
+base64 = "0.22"
+winapi = { version = "0.3", features = ["winhttp", "dpapi", "wincrypt", "tlhelp32", "processthreadsapi", "winreg", "shellapi", "synchapi", "securitybaseapi", "bcrypt", "fileapi", "namedpipeapi", "handleapi", "winbase", "psapi", "ioapiset"] }
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"
+
+[patch.crates-io]
+native-windows-gui = { path = "vendor/native-windows-gui" }

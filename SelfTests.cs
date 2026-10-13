@@ -303,6 +303,9 @@ internal static class SelfTests
         internal JsonElement Saved;
         internal int Saves;
         internal string? SavedPath;
+        internal TaskCompletionSource? HoldNotes;
+        internal bool FailSave;
+        internal bool EmptyList, NullNotes;
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
         {
             if (request.Headers.Authorization?.Scheme != "Token" || request.RequestUri?.Host != "api.vndb.org") throw new Exception("Account authorization must go only to VNDB");
@@ -311,11 +314,13 @@ internal static class SelfTests
             {
                 Saves++; SavedPath = path;
                 Saved = JsonSerializer.Deserialize<JsonElement>(await request.Content!.ReadAsStringAsync(token));
-                return new(System.Net.HttpStatusCode.NoContent);
+                if (Saved.TryGetProperty("notes", out _) && HoldNotes != null) await HoldNotes.Task;
+                return new(FailSave ? System.Net.HttpStatusCode.BadRequest : System.Net.HttpStatusCode.NoContent);
             }
             var json = path.EndsWith("authinfo") ? JsonSerializer.Serialize(new { id = "u1", username = "Test", permissions = ReadOnly ? new[] { "listread" } : new[] { "listread", "listwrite" } })
                 : path.EndsWith("ulist_labels") ? "{\"labels\":[{\"id\":0,\"label\":\"No label\",\"private\":false},{\"id\":2,\"label\":\"Finished\",\"private\":false},{\"id\":7,\"label\":\"Voted\",\"private\":false},{\"id\":10,\"label\":\"Mine\",\"private\":true}]}"
-                : "{\"results\":[{\"id\":\"v1\",\"vote\":55,\"labels\":[{\"id\":1},{\"id\":7},{\"id\":10}]}]}";
+                : "{\"results\":[{\"id\":\"v1\",\"vote\":55,\"notes\":\"Existing note\\nSecond line\",\"labels\":[{\"id\":1},{\"id\":7},{\"id\":10}]}]}";
+            if (path.EndsWith("ulist")) json = EmptyList ? "{\"results\":[]}" : NullNotes ? json.Replace("\"Existing note\\nSecond line\"", "null") : json;
             return new(System.Net.HttpStatusCode.OK) { Content = new StringContent(json) };
         }
     }
@@ -327,11 +332,22 @@ internal static class SelfTests
         using var handler = new AccountHandler(); using var http = new HttpClient(handler);
         var account = new VndbAccount(token, http); await account.Connect(CancellationToken.None);
         var labels = await account.Labels(CancellationToken.None); var entry = await account.Read("v1", CancellationToken.None);
-        if (account.UserId != "u1" || labels.Count != 2 || !labels[1].Private || entry.Vote != 55) throw new Exception("Account fields were parsed incorrectly");
+        if (account.UserId != "u1" || labels.Count != 2 || !labels[1].Private || entry.Vote != 55 || entry.Notes != "Existing note\nSecond line") throw new Exception("Account fields were parsed incorrectly");
+        handler.NullNotes = true;
+        if ((await account.Read("v1", CancellationToken.None)).Notes != "") throw new Exception("A null note must load as blank");
+        handler.NullNotes = false; handler.EmptyList = true;
+        var missing = await account.Read("v2", CancellationToken.None);
+        if (missing.Notes != "" || missing.Vote != null || missing.Labels.Length != 0) throw new Exception("A new list entry must load with a blank note");
+        handler.EmptyList = false;
         await account.Save("v1", null, entry.Labels, [2, 10], CancellationToken.None);
         if (handler.Saved.GetProperty("vote").ValueKind != JsonValueKind.Null ||
             handler.Saved.GetProperty("labels_set")[0].GetInt32() != 2 || handler.Saved.GetProperty("labels_unset").GetArrayLength() != 1 ||
             handler.Saved.GetProperty("labels_unset")[0].GetInt32() != 1) throw new Exception("Label update must preserve custom labels and exclude virtual labels");
+        if (handler.Saved.TryGetProperty("notes", out _)) throw new Exception("Label and vote changes must leave notes unchanged");
+        await account.SaveNotes("v1", "A note\n日本語", CancellationToken.None);
+        if (handler.Saved.EnumerateObject().Count() != 1 || handler.Saved.GetProperty("notes").GetString() != "A note\n日本語") throw new Exception("Notes must save independently of labels and vote");
+        await account.SaveNotes("v1", "", CancellationToken.None);
+        if (handler.Saved.GetProperty("notes").ValueKind != JsonValueKind.Null) throw new Exception("Clearing notes must unset the VNDB field");
         handler.ReadOnly = true;
         try { await account.Connect(CancellationToken.None); throw new Exception("Read-only token was accepted"); }
         catch (InvalidOperationException) { }
@@ -352,6 +368,8 @@ internal static class SelfTests
         list.Items.Clear();
         foreach (var name in new[] {"Playing","Finished","Stalled","Dropped","Wishlist","Blacklist"}) list.Items.Add(name);
         if(list.GetItemRectangle(5).Bottom > list.ClientSize.Height) throw new Exception("All six standard labels must fit at the minimum window size");
+        var notesButton = picker.Parent!.Controls.OfType<Button>().Single(b => b.Text == "Notes...");
+        if (notesButton.Right > notesButton.Parent!.ClientSize.Width) throw new Exception("Notes must fit beside the vote at the minimum window size");
         form.Size = previousSize; form.PerformLayout();
         list.Items.Clear(); list.Items.Add(new VndbAccount.Label(1,"Playing",false),true);
         list.Items.Add(new VndbAccount.Label(2,"Finished",false)); list.Items.Add(new VndbAccount.Label(10,"Mine",true),true);
@@ -373,6 +391,54 @@ internal static class SelfTests
         Application.DoEvents();
         if(handler.Saves!=2 || handler.SavedPath!="/kana/ulist/v1" || handler.Saved.GetProperty("vote").GetInt32()!=80)
             throw new Exception("Switching games must save the pending vote to the original game");
+    }
+    internal static void TestNotes(Form owner)
+    {
+        using var handler = new AccountHandler(); using var http = new HttpClient(handler);
+        var account = new VndbAccount("hsoo-ybws4-j8yb9-qxkw-5obay-px8to-bfyk", http);
+        using var editor = new VndbNotesForm(account, "v17", "Existing note\nSecond line") { ShowInTaskbar = false, Opacity = 0 };
+        editor.Show(owner); Application.DoEvents();
+        var root = editor.Controls.OfType<TableLayoutPanel>().Single(); var text = root.Controls.OfType<TextBox>().Single();
+        void Pump(Func<bool> done)
+        {
+            var timeout = System.Diagnostics.Stopwatch.StartNew();
+            while (!done()) { Application.DoEvents(); Thread.Sleep(10); if (timeout.ElapsedMilliseconds > 4000) throw new Exception("Notes save timed out"); }
+        }
+        if (handler.Saves != 0) throw new Exception("Loading a note must not save it");
+        text.Text = "First edit"; text.Text = "日本語\r\nSecond line";
+        Pump(() => handler.Saves == 1);
+        if (handler.SavedPath != "/kana/ulist/v17" || editor.SavedNotes != "日本語\nSecond line" || handler.Saved.EnumerateObject().Count() != 1)
+            throw new Exception("Typing notes must debounce and save only notes to the selected game");
+        handler.HoldNotes = new TaskCompletionSource(); text.Text = "Sending"; var pending = editor.SavePending();
+        text.Text = "Latest edit";
+        if (!ReferenceEquals(pending, editor.SavePending())) throw new Exception("Note saves must not overlap");
+        handler.HoldNotes.SetResult(); Pump(() => pending.IsCompleted);
+        if (!pending.Result || handler.Saves != 3 || editor.SavedNotes != "Latest edit") throw new Exception("Edits during saving must reach VNDB");
+        text.Clear(); editor.SavePending().GetAwaiter().GetResult();
+        if (handler.Saved.GetProperty("notes").ValueKind != JsonValueKind.Null) throw new Exception("Clearing the editor must clear VNDB notes");
+        text.Text = "Remember where I stopped.\r\n次の章を読む。";
+        using (var bitmap = new Bitmap(editor.Width, editor.Height))
+        { editor.DrawToBitmap(bitmap, new Rectangle(Point.Empty, bitmap.Size)); bitmap.Save("ui-preview-notes.png"); }
+        handler.HoldNotes = new TaskCompletionSource();
+        var saveAndClose = root.Controls.OfType<TableLayoutPanel>().Single().Controls.OfType<FlowLayoutPanel>().Single().Controls.OfType<Button>().Single(b => b.Text == "Save and close");
+        saveAndClose.PerformClick();
+        if (!editor.Visible || saveAndClose.Enabled || !text.ReadOnly) throw new Exception("Save and close must wait for the pending VNDB request");
+        handler.HoldNotes.SetResult(); Pump(() => !editor.Visible);
+        if (editor.Visible || editor.SavedNotes != "Remember where I stopped.\n次の章を読む。") throw new Exception("Closing notes must flush pending edits");
+        var savedCount = handler.Saves;
+        using var alreadySaved = new VndbNotesForm(account, "v17", editor.SavedNotes) { ShowInTaskbar = false, Opacity = 0 };
+        owner.BeginInvoke(new Action(() => alreadySaved.Controls.OfType<TableLayoutPanel>().Single().Controls.OfType<TableLayoutPanel>().Single()
+            .Controls.OfType<FlowLayoutPanel>().Single().Controls.OfType<Button>().Single(b => b.Text == "Save and close").PerformClick()));
+        alreadySaved.ShowDialog(owner);
+        if (alreadySaved.Visible || handler.Saves != savedCount) throw new Exception("Save and close must close a modal editor with already-saved notes");
+        using var failed = new VndbNotesForm(account, "v17", editor.SavedNotes) { ShowInTaskbar = false, Opacity = 0 };
+        failed.Show(owner); handler.FailSave = true;
+        var failedRoot = failed.Controls.OfType<TableLayoutPanel>().Single(); var failedText = failedRoot.Controls.OfType<TextBox>().Single();
+        failedText.Text = "Unsaved draft"; failed.Close();
+        if (!failed.Visible || failedText.Text != "Unsaved draft" || failedText.ReadOnly || failed.SavedNotes != editor.SavedNotes)
+            throw new Exception("A failed save must keep the editor and unsaved draft open");
+        failedRoot.Controls.OfType<TableLayoutPanel>().Single().Controls.OfType<FlowLayoutPanel>().Single().Controls.OfType<Button>().Single(b => b.Text == "Close without saving").PerformClick();
+        if (failed.Visible) throw new Exception("Users must be able to explicitly discard a failed draft");
     }
     private sealed class CoverUploadHandler : HttpMessageHandler
     {

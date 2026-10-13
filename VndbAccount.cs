@@ -73,14 +73,14 @@ internal sealed class VndbAccount
         return data.GetProperty("labels").EnumerateArray().Where(l => l.GetProperty("id").GetInt32() is not (0 or 7))
             .Select(l => new Label(l.GetProperty("id").GetInt32(), l.GetProperty("label").GetString()!, l.GetProperty("private").GetBoolean())).ToList();
     }
-    internal async Task<(int? Vote, int[] Labels)> Read(string vnId, CancellationToken cancellation)
+    internal async Task<(int? Vote, int[] Labels, string Notes)> Read(string vnId, CancellationToken cancellation)
     {
-        var data = await Request(HttpMethod.Post, "ulist", new { user = UserId, filters = new[] { "id", "=", vnId }, fields = "vote,labels.id", results = 1 }, cancellation);
+        var data = await Request(HttpMethod.Post, "ulist", new { user = UserId, filters = new[] { "id", "=", vnId }, fields = "vote,labels.id,notes", results = 1 }, cancellation);
         var entries = data.GetProperty("results");
-        if (entries.GetArrayLength() == 0) return (null, []);
+        if (entries.GetArrayLength() == 0) return (null, [], "");
         var entry = entries[0];
         return (entry.GetProperty("vote").ValueKind == JsonValueKind.Null ? null : entry.GetProperty("vote").GetInt32(),
-            entry.GetProperty("labels").EnumerateArray().Select(l => l.GetProperty("id").GetInt32()).ToArray());
+            entry.GetProperty("labels").EnumerateArray().Select(l => l.GetProperty("id").GetInt32()).ToArray(), entry.GetProperty("notes").GetString() ?? "");
     }
     internal static object Changes(int? vote, int[] original, int[] chosen)
     {
@@ -91,6 +91,71 @@ internal sealed class VndbAccount
     }
     internal Task Save(string vnId, int? vote, int[] original, int[] chosen, CancellationToken cancellation) =>
         Request(HttpMethod.Patch, "ulist/" + vnId, Changes(vote, original, chosen), cancellation);
+    internal Task SaveNotes(string vnId, string notes, CancellationToken cancellation) =>
+        Request(HttpMethod.Patch, "ulist/" + vnId, new { notes = notes.Length == 0 ? null : notes }, cancellation);
+}
+
+internal sealed class VndbNotesForm : Form
+{
+    private readonly VndbAccount account;
+    private readonly string vnId;
+    private readonly CancellationTokenSource shutdown = new();
+    private readonly System.Windows.Forms.Timer delay = new() { Interval = 1000 };
+    private readonly TextBox notes;
+    private readonly Label status = new() { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft };
+    private readonly Button discard = new() { Text = "Close without saving", AutoSize = true, Visible = false };
+    private Task<bool>? saving;
+    private bool allowClose;
+    internal string SavedNotes { get; private set; }
+    internal VndbNotesForm(VndbAccount account, string vnId, string initial)
+    {
+        this.account = account; this.vnId = vnId; SavedNotes = initial.Replace("\r\n", "\n");
+        Text = "VNDB notes"; Icon = Program.AppIcon; Font = new Font(Program.UiFontName, 9);
+        ClientSize = new Size(640, 360); MinimumSize = new Size(460, 280); StartPosition = FormStartPosition.CenterParent;
+        MinimizeBox = MaximizeBox = false;
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(10), ColumnCount = 1, RowCount = 3 };
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 26)); root.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); root.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+        notes = new TextBox { Dock = DockStyle.Fill, Multiline = true, AcceptsReturn = true, ScrollBars = ScrollBars.Vertical, Text = initial };
+        var footer = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1 };
+        footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); footer.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, FlowDirection = FlowDirection.RightToLeft, WrapContents = false, Margin = Padding.Empty };
+        var close = new Button { Text = "Save and close", Width = 125, Height = 28 };
+        buttons.Controls.AddRange([close, discard]); footer.Controls.Add(status); footer.Controls.Add(buttons);
+        root.Controls.Add(new Label { Text = "My notes · saves automatically to VNDB", Dock = DockStyle.Fill }); root.Controls.Add(notes); root.Controls.Add(footer); Controls.Add(root);
+        notes.TextChanged += (_, _) => { delay.Stop(); delay.Start(); status.Text = "Changes pending…"; };
+        delay.Tick += async (_, _) => { delay.Stop(); await SavePending(); };
+        close.Click += (_, _) => Close();
+        CancelButton = close;
+        discard.Click += (_, _) => { allowClose = true; Close(); };
+        FormClosing += async (_, e) =>
+        {
+            if (allowClose) return;
+            e.Cancel = true; delay.Stop(); notes.ReadOnly = true; close.Enabled = false;
+            // Close after this FormClosing event returns, including when saving completes synchronously.
+            if (await SavePending()) { allowClose = true; BeginInvoke(new Action(Close)); }
+            else if (!IsDisposed) { notes.ReadOnly = false; close.Enabled = true; }
+        };
+    }
+    internal Task<bool> SavePending() => saving is { IsCompleted: false } ? saving : saving = SaveChanges();
+    private async Task<bool> SaveChanges()
+    {
+        try
+        {
+            while (notes.Text.Replace("\r\n", "\n") != SavedNotes)
+            {
+                var text = notes.Text.Replace("\r\n", "\n"); status.Text = "Saving to VNDB…";
+                await account.SaveNotes(vnId, text, shutdown.Token); SavedNotes = text;
+                if (IsDisposed) return true;
+            }
+            status.Text = "Saved to VNDB."; discard.Visible = false; return true;
+        }
+        catch (Exception e) { if (!IsDisposed) { status.Text = "Not saved to VNDB: " + e.Message; discard.Visible = true; } return false; }
+    }
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing && !IsDisposed) { delay.Dispose(); shutdown.Cancel(); shutdown.Dispose(); }
+        base.Dispose(disposing);
+    }
 }
 
 internal sealed class VndbAccountPanel : UserControl
@@ -102,6 +167,8 @@ internal sealed class VndbAccountPanel : UserControl
     private readonly Label connection = new() { Dock = DockStyle.Fill, AutoEllipsis = true, Text = "Not connected to VNDB" };
     private readonly CheckedListBox labels = new() { Dock = DockStyle.Fill, CheckOnClick = true, IntegralHeight = false };
     private readonly VotePicker vote = new();
+    private readonly Button editNotes = new() { Text = "Notes...", AutoSize = true };
+    private string notes = "";
     private readonly CheckBox showProfile = new() { Text = "Show VNDB profile button", AutoSize = true };
     internal event Action? ProfileChanged;
     private bool updatingProfile;
@@ -123,6 +190,7 @@ internal sealed class VndbAccountPanel : UserControl
         var voteRow = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false };
         voteRow.Controls.Add(new Label { Text = "My vote", AutoSize = true, Padding = new Padding(0, 5, 0, 0) });
         voteRow.Controls.Add(vote);
+        voteRow.Controls.Add(editNotes);
         var labelGroup = new GroupBox { Text = "My labels", Dock = DockStyle.Fill, Padding = new Padding(6) };
         labels.BorderStyle = BorderStyle.None; labelGroup.Controls.Add(labels);
         var connectionRow = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = Padding.Empty };
@@ -151,6 +219,13 @@ internal sealed class VndbAccountPanel : UserControl
             QueueSave();
         };
         vote.ValueChanged += QueueSave;
+        editNotes.Click += async (_, _) =>
+        {
+            if (saveQueued && !await SaveEntry()) return;
+            if (account == null || vnId == null || busy || loadedId != vnId) return;
+            using var editor = new VndbNotesForm(account, vnId, notes);
+            editor.ShowDialog(FindForm()); notes = editor.SavedNotes;
+        };
         connect.Click += async (_, _) =>
         {
             if (busy) return;
@@ -158,7 +233,7 @@ internal sealed class VndbAccountPanel : UserControl
             if (account != null)
             {
                 var previous = settings.VndbTokenProtected;
-                try { settings.VndbTokenProtected = null; settings.Save(); account = null; loadedId = null; labels.Items.Clear(); vote.Value = null; connect.Text = "Connect VNDB"; connection.Text = "Not connected to VNDB"; message.Text = "Disconnected from VNDB."; }
+                try { settings.VndbTokenProtected = null; settings.Save(); account = null; loadedId = null; labels.Items.Clear(); vote.Value = null; notes = ""; connect.Text = "Connect VNDB"; connection.Text = "Not connected to VNDB"; message.Text = "Disconnected from VNDB."; }
                 catch (Exception e) { settings.VndbTokenProtected = previous; message.Text = e.Message; }
                 UpdateEnabled(); ProfileChanged?.Invoke(); return;
             }
@@ -183,7 +258,7 @@ internal sealed class VndbAccountPanel : UserControl
     private void UpdateEnabled()
     {
         connect.Enabled = !busy;
-        labels.Enabled = vote.Enabled = account != null && vnId != null && !busy && loadedId == vnId;
+        labels.Enabled = vote.Enabled = editNotes.Enabled = account != null && vnId != null && !busy && loadedId == vnId;
         showProfile.Enabled = !busy && Settings.NormalizeProfileUrl(settings.ProfileUrl) != null;
     }
     internal void RefreshProfileChoice()
@@ -232,11 +307,11 @@ internal sealed class VndbAccountPanel : UserControl
         busy = true; UpdateEnabled(); message.Text = "Loading VNDB list…";
         try
         {
-            var entry = id == null ? (Vote: (int?)null, Labels: Array.Empty<int>()) : await account.Read(id, shutdown.Token);
+            var entry = id == null ? (Vote: (int?)null, Labels: Array.Empty<int>(), Notes: "") : await account.Read(id, shutdown.Token);
             if (IsDisposed || requestVersion != version) return;
             original = entry.Labels; loading = true;
             for (var i = 0; i < labels.Items.Count; i++) labels.SetItemChecked(i, original.Contains(((VndbAccount.Label)labels.Items[i]).Id));
-            vote.Value = entry.Vote; loading = false;
+            vote.Value = entry.Vote; notes = entry.Notes; loading = false;
             loadedId = id;
             connection.Text = "Connected as " + account.Username;
             message.Text = "";

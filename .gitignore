@@ -12,6 +12,8 @@ settings.json.tmp
 status.json
 app.log
 node_modules/
+.rust-tools/
+rust-app/target/
 .wrangler/
 .dev.vars
 .env
