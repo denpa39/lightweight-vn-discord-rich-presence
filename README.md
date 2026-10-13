@@ -2,7 +2,7 @@
 
 A lightweight Windows app that shows the visual novel you're playing on Discord, with its title, studio, cover, chapter details and elapsed time.
 
-**About 1.5 MB · Native Rust app · **
+About 1.5 MB Native Rust app
 
 <img src="docs/screenshots/overview.png" alt="VN Presence: game library on the left, cover and Discord preview in the center, and VNDB controls on the right" width="1000">
 
